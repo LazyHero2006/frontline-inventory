@@ -3,6 +3,13 @@
 
 <h1 class="text-xl font-semibold mb-3">{{ item.name }} <span class="text-zinc-500 text-base">({{ item.sku }})</span></h1>
 
+{% if customers is defined %}
+  <div class="text-xs text-zinc-500 mb-2">Kunder i render: {{ customers|length }}</div>
+{% else %}
+  <div class="text-xs text-rose-600 mb-2">customers IKKE i context</div>
+{% endif %}
+<div data-probe="ITEM-DETAIL-TEMPLATE-AKTIV" class="hidden"></div>
+
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
   <div class="rounded-2xl border p-4 bg-white">
     <div class="text-sm text-zinc-600">Ledig</div>

@@ -8,6 +8,8 @@ from starlette.middleware.sessions import SessionMiddleware
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from sqlalchemy import select
+from .models import Customer
+from .db import DB_PATH
 from .models import Item, Category, Location, Tx, ItemUnit, PurchaseOrder, CustomerOrder, Customer, CustomerOrderLine
 
 from . import crud
@@ -140,6 +142,20 @@ def dashboard(request: Request, q: str = "", category: str = "Alle", location: s
         "fmt_currency": fmt_currency
     })
 
+@app.get("/dev/whoami")
+def dev_whoami(db: Session = Depends(get_db), current_user = Depends(require_user)):
+    rows = db.execute(select(Customer).order_by(Customer.id.desc()).limit(5)).scalars().all()
+    return {
+        "db_path": DB_PATH,
+        "customers_count": db.execute(select(Customer)).scalars().count() if hasattr(db.execute(select(Customer)).scalars(), "count") else len(db.execute(select(Customer)).scalars().all()),
+        "last5": [{"id": c.id, "name": c.name, "email": c.email} for c in rows][::-1],
+    }
+
+@app.get("/dev/customers")
+def dev_customers(db: Session = Depends(get_db), current_user = Depends(require_user)):
+    rows = db.execute(select(Customer).order_by(Customer.id.desc())).scalars().all()
+    return [{"id": c.id, "name": c.name, "email": c.email} for c in rows]
+
 @app.get("/item/new", response_class=HTMLResponse)
 def item_new(request: Request, current_user=Depends(require_user)):
     return templates.TemplateResponse("item_form.html", {"request": request, "user": current_user, "item": None})
@@ -198,26 +214,28 @@ async def item_detail(
         select(Tx).where(Tx.item_id == item.id).order_by(Tx.id.desc()).limit(50)
     ).scalars().all()
 
-    # Tellere slik du bruker dem i HTML (count_avail/res/used)
-    count_avail = sum(1 for u in units if u.status == "available" or u.status == "ledig")
-    count_res   = sum(1 for u in units if u.status == "reserved"  or u.status == "reservert")
-    count_used  = sum(1 for u in units if u.status == "used"      or u.status == "brukt")
+    count_avail = sum(1 for u in units if u.status in ("available", "ledig"))
+    count_res   = sum(1 for u in units if u.status in ("reserved", "reservert"))
+    count_used  = sum(1 for u in units if u.status in ("used", "brukt"))
 
-    # KUNDELISTA (det som manglet)
-    customers = db.execute(
-        select(Customer).order_by(Customer.name.asc())
-    ).scalars().all()
+    customers = db.execute(select(Customer).order_by(Customer.name.asc())).scalars().all()
 
-    return templates.TemplateResponse("item_detail.html", {
-        "request": request,
-        "item": item,
-        "units": units,
-        "txs": txs,
-        "count_avail": count_avail,
-        "count_res": count_res,
-        "count_used": count_used,
-        "customers": customers,   # <-- nøkkelen
-    })
+    # HARD DEBUG I LOGG – skal være > 0
+    print(f"[item_detail] DB={DB_PATH} customers_len={len(customers)} time={datetime.utcnow().isoformat()}")
+
+    return templates.TemplateResponse(
+        "item_detail.html",
+        {
+            "request": request,
+            "item": item,
+            "units": units,
+            "txs": txs,
+            "count_avail": count_avail,
+            "count_res": count_res,
+            "count_used": count_used,
+            "customers": customers,
+        },
+    )
 
 @app.get("/item/{item_id}/edit", response_class=HTMLResponse)
 def item_edit(request: Request, item_id: int, db: Session = Depends(get_db), current_user=Depends(require_user)):
