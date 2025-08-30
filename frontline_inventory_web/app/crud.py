@@ -56,13 +56,13 @@ def get_or_create_open_co_for_customer(db: Session, customer_id: int) -> Custome
     return co
 
 def reserve_qty_for_customer(
-    db: Session,
+    db,
     item_id: int,
     qty: int,
     customer_id: int,
     note: str,
     actor,
-) -> CustomerOrder:
+):
     if qty <= 0:
         raise HTTPException(400, "Antall må være > 0")
 
@@ -70,26 +70,27 @@ def reserve_qty_for_customer(
     if not item:
         raise HTTPException(404, "Fant ikke varen")
 
+    # Finn/lag åpen CO for kunden
     co = get_or_create_open_co_for_customer(db, customer_id)
 
-    # Finn ledige enheter å reservere
+    # Ledige enheter: støtt både norsk/engelsk status
     units = db.execute(
         select(ItemUnit)
         .where(ItemUnit.item_id == item_id)
-        .where(ItemUnit.status == "ledig")
+        .where(ItemUnit.status.in_(("ledig", "available")))
         .order_by(ItemUnit.id.asc())
         .limit(qty)
     ).scalars().all()
 
-    if len(units) < qty:
-        raise HTTPException(400, f"Mangler enheter: trenger {qty}, fant {len(units)}")
+    take = min(qty, len(units))
+    if take == 0:
+        # ingen enheter – meld fra, men ikke crash
+        raise HTTPException(400, f"Ingen ledige enheter å reservere.")
 
-    # Merk enhetene som reservert på CO
-    for u in units:
+    reserved_now = 0
+    for u in units[:take]:
         u.status = "reservert"
         u.reserved_co_id = co.id
-
-        # logg transaksjon (delta=0 for status-endring eller -1 hvis du vil telle ned "ledig")
         tx = Tx(
             item_id=item.id,
             sku=item.sku,
@@ -103,9 +104,10 @@ def reserve_qty_for_customer(
             co_id=co.id,
         )
         db.add(tx)
+        reserved_now += 1
 
     db.commit()
-    return co
+    return co, reserved_now
 
 def get_or_create_co_by_code(db: Session, code: str, customer: Customer | None = None) -> CustomerOrder:
     code = code.strip()

@@ -41,6 +41,18 @@
   </div>
 </header>
 <main class="container mx-auto px-4 py-6">
+  <!-- Flash-meldinger skal ligge UTEFOR block content -->
+  {% if request.session.get('flash_error') %}
+    <div class="mb-3 rounded-lg border border-rose-200 bg-rose-50 text-rose-800 px-3 py-2">
+      {{ request.session.pop('flash_error') }}
+    </div>
+  {% endif %}
+  {% if request.session.get('flash_success') %}
+    <div class="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 px-3 py-2">
+      {{ request.session.pop('flash_success') }}
+    </div>
+  {% endif %}
+
   {% block content %}{% endblock %}
 </main>
 </body>

@@ -151,10 +151,10 @@ def dev_whoami(db: Session = Depends(get_db), current_user = Depends(require_use
         "last5": [{"id": c.id, "name": c.name, "email": c.email} for c in rows][::-1],
     }
 
-@app.get("/dev/customers")
-def dev_customers(db: Session = Depends(get_db), current_user = Depends(require_user)):
-    rows = db.execute(select(Customer).order_by(Customer.id.desc())).scalars().all()
-    return [{"id": c.id, "name": c.name, "email": c.email} for c in rows]
+@app.get("/api/customers")
+def api_customers(db: Session = Depends(get_db), current_user = Depends(require_user)):
+    rows = db.execute(select(Customer).order_by(Customer.name.asc())).scalars().all()
+    return [{"id": c.id, "name": c.name, "email": c.email or ""} for c in rows]
 
 @app.get("/item/new", response_class=HTMLResponse)
 def item_new(request: Request, current_user=Depends(require_user)):
@@ -204,24 +204,30 @@ async def item_detail(
     if not item:
         raise HTTPException(status_code=404)
 
+    # Enheter til tabellen nederst
     units = db.execute(
         select(ItemUnit)
         .where(ItemUnit.item_id == item.id)
         .order_by(ItemUnit.status.desc(), ItemUnit.id.desc())
     ).scalars().all()
 
+    # Transaksjoner (hvis vist i UI)
     txs = db.execute(
         select(Tx).where(Tx.item_id == item.id).order_by(Tx.id.desc()).limit(50)
     ).scalars().all()
 
+    # Tellerne slik templaten din forventer (count_avail/res/used)
     count_avail = sum(1 for u in units if u.status in ("available", "ledig"))
-    count_res   = sum(1 for u in units if u.status in ("reserved", "reservert"))
-    count_used  = sum(1 for u in units if u.status in ("used", "brukt"))
+    count_res   = sum(1 for u in units if u.status in ("reserved",  "reservert"))
+    count_used  = sum(1 for u in units if u.status in ("used",      "brukt"))
 
-    customers = db.execute(select(Customer).order_by(Customer.name.asc())).scalars().all()
+    # KUNDER til dropdown (nøkkelen)
+    customers = db.execute(
+        select(Customer).order_by(Customer.name.asc())
+    ).scalars().all()
 
-    # HARD DEBUG I LOGG – skal være > 0
-    print(f"[item_detail] DB={DB_PATH} customers_len={len(customers)} time={datetime.utcnow().isoformat()}")
+    # HØYLYTT DEBUG i konsollen – skal være > 0 hvis kunder finnes
+    print(f"[item_detail] DB={DB_PATH} customers_len={len(customers)} at {datetime.utcnow().isoformat()}")
 
     return templates.TemplateResponse(
         "item_detail.html",
@@ -398,18 +404,16 @@ async def item_reserve_customer(
     db: Session = Depends(get_db),
     current_user = Depends(require_user),
 ):
-    co = crud.reserve_qty_for_customer(db, item_id=item_id, qty=qty, customer_id=customer_id, note=note, actor=current_user)
-
-    # valgfritt: send WS-event
-    await bcast.publish({
-        "type": "reservation",
-        "item_id": item_id,
-        "qty": qty,
-        "co_code": co.code,
-        "customer_id": co.customer_id,
-        "ts": datetime.utcnow().isoformat(),
-        "by": current_user.name,
-    })
+    try:
+        co, taken = crud.reserve_qty_for_customer(
+            db, item_id=item_id, qty=qty, customer_id=customer_id, note=note, actor=current_user
+        )
+        if taken < qty:
+            request.session["flash_success"] = f"Reserverte {taken} av {qty} stk til {co.code} (resten manglet på lager)."
+        else:
+            request.session["flash_success"] = f"Reserverte {taken} stk til {co.code}."
+    except HTTPException as e:
+        request.session["flash_error"] = e.detail if hasattr(e, "detail") else str(e)
 
     return RedirectResponse(url=f"/item/{item_id}", status_code=303)
 

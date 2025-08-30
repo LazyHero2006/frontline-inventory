@@ -28,13 +28,46 @@
 <form method="post" action="/item/{{ item.id }}/reserve_customer" class="flex gap-3 items-end mb-3">
   <div class="flex-1">
     <label class="block text-sm text-gray-600">Kunde</label>
-    <select name="customer_id" class="px-3 py-2 rounded border w-full" required>
-      <option value="" disabled selected>Velg kunde…</option>
-      {% for c in customers %}
-        <option value="{{ c.id }}">{{ c.name }}{% if c.email %} – {{ c.email }}{% endif %}</option>
-      {% endfor %}
-    </select>
+    <select id="customer_select" name="customer_id" class="px-3 py-2 rounded border w-full" required>
+  <option value="" disabled selected>Velg kunde…</option>
+  {% if customers is defined %}
+    {% for c in customers %}
+      <option value="{{ c.id }}">{{ c.name }}{% if c.email %} – {{ c.email }}{% endif %}</option>
+    {% endfor %}
+  {% endif %}
+</select>
   </div>
+
+<script>
+(async () => {
+  const sel = document.getElementById('customer_select');
+  if (!sel) return;
+
+  // Hvis templaten IKKE fikk kunder i context, henter vi dem via API:
+  const hasServerOptions = sel.querySelectorAll('option').length > 1;
+  if (hasServerOptions) return; // allerede fylt av server
+
+  try {
+    const res = await fetch('/api/customers', { credentials: 'same-origin' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json(); // [{id,name,email}, ...]
+
+    // Tøm bort “Velg kunde…” og legg den inn igjen på topp:
+    const first = sel.querySelector('option');
+    sel.innerHTML = '';
+    sel.appendChild(first);
+
+    for (const c of data) {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = c.email ? `${c.name} – ${c.email}` : c.name;
+      sel.appendChild(opt);
+    }
+  } catch (err) {
+    console.error('Kunne ikke hente kunder:', err);
+  }
+})();
+</script>
 
   <div>
     <label class="block text-sm text-gray-600">Antall</label>
