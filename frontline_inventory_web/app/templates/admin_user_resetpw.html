@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="text-xl font-semibold mb-3">Nullstill passord: {{ row.email }}</h1>
+<form method="post" action="/admin/users/{{ row.id }}/resetpw" class="grid md:grid-cols-2 gap-3">
+  <label class="grid gap-1">
+    <span class="text-xs text-zinc-500">Nytt passord</span>
+    <input name="password" type="password" required class="px-3 py-2 rounded border border-zinc-300">
+  </label>
+  <div class="md:col-span-2 flex items-center gap-2">
+    <button class="px-3 py-2 rounded bg-zinc-900 text-white" type="submit">Oppdater passord</button>
+    <a class="px-3 py-2 rounded border border-zinc-300" href="/admin/users">Avbryt</a>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="text-xl font-semibold mb-3">{{ 'Ny bruker' if not editing else ('Rediger: ' ~ row.email) }}</h1>
+{% if error %}<div class="mb-3 text-sm text-rose-600">{{ error }}</div>{% endif %}
+
+{% if not editing %}
+<form method="post" action="/admin/users/new" class="grid md:grid-cols-2 gap-3">
+  <label class="grid gap-1">
+    <span class="text-xs text-zinc-500">Navn</span>
+    <input name="name" required class="px-3 py-2 rounded border border-zinc-300">
+  </label>
+  <label class="grid gap-1">
+    <span class="text-xs text-zinc-500">E‑post</span>
+    <input name="email" type="email" required class="px-3 py-2 rounded border border-zinc-300">
+  </label>
+  <label class="grid gap-1">
+    <span class="text-xs text-zinc-500">Rolle</span>
+    <select name="role" class="px-3 py-2 rounded border border-zinc-300">
+      <option value="user">user</option>
+      <option value="admin">admin</option>
+    </select>
+  </label>
+  <label class="grid gap-1">
+    <span class="text-xs text-zinc-500">Passord</span>
+    <input name="password" type="password" required class="px-3 py-2 rounded border border-zinc-300">
+  </label>
+  <div class="md:col-span-2 flex items-center gap-2">
+    <button class="px-3 py-2 rounded bg-zinc-900 text-white" type="submit">Opprett</button>
+    <a class="px-3 py-2 rounded border border-zinc-300" href="/admin/users">Avbryt</a>
+  </div>
+</form>
+{% else %}
+<form method="post" action="/admin/users/{{ row.id }}/edit" class="grid md:grid-cols-2 gap-3">
+  <label class="grid gap-1">
+    <span class="text-xs text-zinc-500">Navn</span>
+    <input name="name" value="{{ row.name }}" required class="px-3 py-2 rounded border border-zinc-300">
+  </label>
+  <label class="grid gap-1">
+    <span class="text-xs text-zinc-500">Rolle</span>
+    <select name="role" class="px-3 py-2 rounded border border-zinc-300">
+      <option value="user" {% if row.role=='user' %}selected{% endif %}>user</option>
+      <option value="admin" {% if row.role=='admin' %}selected{% endif %}>admin</option>
+    </select>
+  </label>
+  <div class="md:col-span-2 flex items-center gap-2">
+    <button class="px-3 py-2 rounded bg-zinc-900 text-white" type="submit">Lagre</button>
+    <a class="px-3 py-2 rounded border border-zinc-300" href="/admin/users">Avbryt</a>
+  </div>
+</form>
+{% endif %}
+{% endblock %}

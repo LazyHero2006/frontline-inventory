@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="max-w-md mx-auto">
+  <h1 class="text-xl font-semibold mb-3">Logg inn</h1>
+  {% if error %}<div class="mb-3 text-sm text-rose-600">{{ error }}</div>{% endif %}
+  <form method="post" action="/auth/login" class="grid gap-3">
+    <label class="grid gap-1">
+      <span class="text-xs text-zinc-500">E‑post</span>
+      <input name="email" type="email" required class="px-3 py-2 rounded border border-zinc-300">
+    </label>
+    <label class="grid gap-1">
+      <span class="text-xs text-zinc-500">Passord</span>
+      <input name="password" type="password" required class="px-3 py-2 rounded border border-zinc-300">
+    </label>
+    <button class="px-3 py-2 rounded bg-zinc-900 text-white" type="submit">Logg inn</button>
+  </form>
+  <div class="text-xs text-zinc-500 mt-3">
+    Første gangs oppsett? <a class="underline" href="/auth/bootstrap">Lag admin-konto</a>
+  </div>
+</div>
+{% endblock %}

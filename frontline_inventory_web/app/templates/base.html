@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Frontline Inventory</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <link rel="icon" href="data:,">
+  <style>
+    .container { max-width: 1200px; }
+  </style>
+</head>
+<body class="bg-zinc-50 text-zinc-900">
+<header class="sticky top-0 z-10 backdrop-blur bg-white/80 border-b border-zinc-200">
+  <div class="container mx-auto px-4 py-3 flex items-center gap-3">
+    <a href="/" class="flex items-center gap-2 group">
+  <img src="/static/frontline-logo.svg" alt="Frontline" class="h-12 w-50 rounded">
+  <span class="font-black tracking-tight text-xl group-hover:underline">
+    • Inventory
+  </span>
+</a>
+    {% if low_count is defined and low_count > 0 %}
+    <span class="text-xs px-2 py-1 rounded-full bg-rose-600 text-white">{{ low_count }} lav beholdning</span>
+    {% endif %}
+    <nav class="ml-auto flex items-center gap-2">
+  <a href="/" class="px-3 py-1.5 rounded-lg border border-zinc-300">Oversikt</a>
+  <a href="/item/new" class="px-3 py-1.5 rounded-lg bg-zinc-900 text-white">+ Ny</a>
+  <a href="/receive" class="px-3 py-1.5 rounded-lg border border-zinc-300">Mottak</a>
+<a href="/customers" class="hover:underline">Kunder</a>
+<a href="/co" class="hover:underline">Kundeordre</a>
+  <a href="/tx" class="px-3 py-1.5 rounded-lg border border-zinc-300">Logg</a>
+  <a href="/import" class="px-3 py-1.5 rounded-lg border border-zinc-300">Import/Export</a>
+{% if user and user.role == 'admin' %}
+  <a href="/admin/users" class="px-3 py-1.5 rounded-lg border border-zinc-300">Admin</a>
+{% endif %}
+  <form action="/auth/logout" method="post" class="ml-2">
+    <button class="px-3 py-1.5 rounded-lg border border-zinc-300">Logg ut</button>
+  </form>
+</nav>
+  </div>
+</header>
+<main class="container mx-auto px-4 py-6">
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

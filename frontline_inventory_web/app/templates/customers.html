@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="text-xl font-semibold mb-3">Kunder</h1>
+<div class="mb-3"><a class="px-3 py-2 rounded bg-zinc-900 text-white" href="/customers/new">+ Ny kunde</a></div>
+<div class="rounded-2xl border border-zinc-200 bg-white overflow-hidden">
+  <table class="w-full text-sm">
+    <thead class="bg-zinc-100">
+      <tr><th class="p-2 text-left">Navn</th><th class="p-2 text-left">E-post</th><th class="p-2 text-left">Telefon</th></tr>
+    </thead>
+    <tbody>
+      {% for c in rows %}
+      <tr class="odd:bg-zinc-50"><td class="p-2">{{ c.name }}</td><td class="p-2">{{ c.email }}</td><td class="p-2">{{ c.phone }}</td></tr>
+      {% endfor %}
+      {% if rows|length == 0 %}<tr><td class="p-3 text-zinc-500" colspan="3">Ingen kunder.</td></tr>{% endif %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

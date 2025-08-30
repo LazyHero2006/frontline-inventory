@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="flex items-center justify-between mb-3">
+  <h1 class="text-xl font-semibold">Brukere</h1>
+  <a href="/admin/users/new" class="px-3 py-2 rounded bg-zinc-900 text-white">+ Ny bruker</a>
+</div>
+
+<div class="rounded-2xl border border-zinc-200 overflow-hidden bg-white">
+  <table class="w-full text-sm">
+    <thead class="bg-zinc-100">
+      <tr class="text-left">
+        <th class="p-2">Navn</th>
+        <th class="p-2">E‑post</th>
+        <th class="p-2">Rolle</th>
+        <th class="p-2">Opprettet</th>
+        <th class="p-2 w-56">Handling</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in rows %}
+      <tr class="odd:bg-zinc-50">
+        <td class="p-2">{{ u.name }}</td>
+        <td class="p-2">{{ u.email }}</td>
+        <td class="p-2">{{ u.role }}</td>
+        <td class="p-2 whitespace-nowrap">{{ u.created_at.strftime('%Y-%m-%d %H:%M') if u.created_at else '' }}</td>
+        <td class="p-2">
+          <a class="px-2 py-1 rounded border border-zinc-300" href="/admin/users/{{ u.id }}/edit">Rediger</a>
+          <a class="px-2 py-1 rounded border border-zinc-300" href="/admin/users/{{ u.id }}/resetpw">Nullstill passord</a>
+          <form action="/admin/users/{{ u.id }}/delete" method="post" style="display:inline" onsubmit="return confirm('Slette bruker?')">
+            <button class="px-2 py-1 rounded border border-rose-300 text-rose-700">Slett</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+      {% if rows|length == 0 %}
+      <tr><td class="p-3 text-zinc-500" colspan="5">Ingen brukere.</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

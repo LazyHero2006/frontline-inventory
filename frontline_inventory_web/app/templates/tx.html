@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="text-xl font-semibold mb-3">Bevegelseslogg</h1>
+<form class="mb-3" method="get" action="/tx">
+  <input class="px-3 py-2 rounded border border-zinc-300" name="q" value="{{ q }}" placeholder="Søk i logg (navn, SKU, notat, bruker)">
+  <button class="px-3 py-2 rounded bg-zinc-900 text-white" type="submit">Søk</button>
+</form>
+<div class="rounded-2xl border border-zinc-200 overflow-hidden bg-white">
+  <table class="w-full text-sm">
+    <thead class="bg-zinc-100">
+      <tr class="text-left">
+        <th class="p-2">Tid</th>
+        <th class="p-2">Navn</th>
+        <th class="p-2">SKU</th>
+        <th class="p-2">Endring</th>
+        <th class="p-2">Notat</th>
+        <th class="p-2">Bruker</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in rows %}
+      <tr class="odd:bg-zinc-50">
+        <td class="p-2 whitespace-nowrap">{{ t.ts.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+        <td class="p-2">{{ t.name }}</td>
+        <td class="p-2">{{ t.sku }}</td>
+        <td class="p-2 font-semibold {% if t.delta >= 0 %}text-emerald-700{% else %}text-rose-700{% endif %}">{{ '+' if t.delta>=0 else '' }}{{ t.delta }}</td>
+        <td class="p-2">
+  {{ t.note }}
+  {% if t.co %}<span class="text-zinc-500"> • CO {{ t.co.code }}</span>{% endif %}
+  {% if t.po %}<span class="text-zinc-500"> • PO {{ t.po.code }}</span>{% endif %}
+</td>
+        <td class="p-2">{{ t.user_name or '' }}</td>
+      </tr>
+      {% endfor %}
+      {% if rows|length == 0 %}
+      <tr><td class="p-3 text-zinc-500" colspan="6">Ingen hendelser.</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

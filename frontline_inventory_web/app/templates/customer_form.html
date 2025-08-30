@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="text-xl font-semibold mb-3">Ny kunde</h1>
+<form method="post" class="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4">
+  <div><label class="block text-sm text-zinc-600">Navn</label><input name="name" class="px-3 py-2 rounded border w-full" required></div>
+  <div class="grid md:grid-cols-2 gap-3">
+    <div><label class="block text-sm text-zinc-600">E-post</label><input name="email" class="px-3 py-2 rounded border w-full"></div>
+    <div><label class="block text-sm text-zinc-600">Telefon</label><input name="phone" class="px-3 py-2 rounded border w-full"></div>
+  </div>
+  <div><label class="block text-sm text-zinc-600">Notat</label><input name="notes" class="px-3 py-2 rounded border w-full"></div>
+  <div class="flex justify-end"><button class="px-3 py-2 rounded bg-zinc-900 text-white">Lagre</button></div>
+</form>
+{% endblock %}

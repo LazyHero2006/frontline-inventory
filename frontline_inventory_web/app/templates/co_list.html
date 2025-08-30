@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="text-xl font-semibold mb-3">Kundeordre</h1>
+<div class="mb-3"><a class="px-3 py-2 rounded bg-zinc-900 text-white" href="/co/new">+ Ny ordre</a></div>
+<div class="rounded-2xl border border-zinc-200 bg-white overflow-hidden">
+  <table class="w-full text-sm">
+    <thead class="bg-zinc-100"><tr><th class="p-2 text-left">Kode</th><th class="p-2 text-left">Kunde</th><th class="p-2 text-left">Status</th><th class="p-2"></th></tr></thead>
+    <tbody>
+      {% for co in rows %}
+      <tr class="odd:bg-zinc-50">
+        <td class="p-2">{{ co.code }}</td>
+        <td class="p-2">{{ co.customer_id }}</td>
+        <td class="p-2">{{ co.status }}</td>
+        <td class="p-2 text-right"><a class="text-zinc-900 hover:underline" href="/co/{{ co.id }}">Åpne</a></td>
+      </tr>
+      {% endfor %}
+      {% if rows|length == 0 %}<tr><td class="p-3 text-zinc-500" colspan="4">Ingen ordre.</td></tr>{% endif %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

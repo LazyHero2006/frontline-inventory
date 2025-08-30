@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="text-xl font-semibold mb-3">Ny kundeordre</h1>
+<form method="post" class="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4">
+  <div><label class="block text-sm text-zinc-600">Kunde</label>
+    <select name="customer_id" class="px-3 py-2 rounded border w-full" required>
+      {% for c in customers %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+    </select>
+  </div>
+  <div><label class="block text-sm text-zinc-600">Ordrekode (CO)</label><input name="code" class="px-3 py-2 rounded border w-full" placeholder="CO-2025-001" required></div>
+  <div><label class="block text-sm text-zinc-600">Notat</label><input name="notes" class="px-3 py-2 rounded border w-full"></div>
+  <div class="flex justify-end"><button class="px-3 py-2 rounded bg-zinc-900 text-white">Opprett</button></div>
+</form>
+{% endblock %}

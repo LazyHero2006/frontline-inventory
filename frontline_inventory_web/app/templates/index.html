@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block content %}
+{% if error %}
+<div class="mb-3 p-3 rounded border border-amber-300 bg-amber-50 text-amber-900">
+  {{ error }}
+</div>
+{% endif %}
+<form class="grid md:grid-cols-3 gap-2 items-end mb-4" method="get" action="/">
+  <label class="grid gap-1 md:col-span-2">
+    <span class="text-xs text-zinc-500">Søk</span>
+    <input class="px-3 py-2 rounded-lg border border-zinc-300" name="q" value="{{ q }}" placeholder="Søk navn, SKU, notater">
+  </label>
+  <div class="grid grid-cols-3 gap-2">
+    <label class="grid gap-1">
+      <span class="text-xs text-zinc-500">Kategori</span>
+      <select class="px-3 py-2 rounded-lg border border-zinc-300" name="category">
+        <option {% if category=='Alle' %}selected{% endif %}>Alle</option>
+        {% for c in cats %}<option {% if category==c %}selected{% endif %}>{{ c }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="grid gap-1">
+      <span class="text-xs text-zinc-500">Lokasjon</span>
+      <select class="px-3 py-2 rounded-lg border border-zinc-300" name="location">
+        <option {% if location=='Alle' %}selected{% endif %}>Alle</option>
+        {% for l in locs %}<option {% if location==l %}selected{% endif %}>{{ l }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="grid gap-1">
+      <span class="text-xs text-zinc-500">Sortering</span>
+      <select class="px-3 py-2 rounded-lg border border-zinc-300" name="sort">
+        <option value="name" {% if sort=='name' %}selected{% endif %}>Navn</option>
+        <option value="qty" {% if sort=='qty' %}selected{% endif %}>Antall</option>
+        <option value="value" {% if sort=='value' %}selected{% endif %}>Lagerverdi</option>
+        <option value="sku" {% if sort=='sku' %}selected{% endif %}>SKU</option>
+      </select>
+    </label>
+  </div>
+  <div class="md:col-span-3 flex items-center gap-2">
+    <button class="px-3 py-2 rounded-lg bg-zinc-900 text-white" type="submit">Filtrer</button>
+    <a href="/" class="px-3 py-2 rounded-lg border border-zinc-300">Nullstill</a>
+    <div class="ml-auto grid grid-cols-3 gap-3 text-sm">
+      <div><div class="text-xs text-zinc-500">Unike varer</div><div class="font-semibold">{{ total_items }}</div></div>
+      <div><div class="text-xs text-zinc-500">Lagerverdi</div><div class="font-semibold">{{ fmt_currency(total_value) }} NOK</div></div>
+      <div><div class="text-xs text-zinc-500">MVA 25% (hint)</div><div class="font-semibold">{{ fmt_currency(total_value*0.25) }} NOK</div></div>
+    </div>
+  </div>
+</form>
+
+<div class="rounded-2xl border border-zinc-200 overflow-hidden bg-white">
+  <table class="w-full text-sm">
+    <thead class="bg-zinc-100">
+      <tr class="text-left">
+        <th class="p-2">Vare</th>
+        <th class="p-2">SKU</th>
+        <th class="p-2">Kategori</th>
+        <th class="p-2">Lokasjon</th>
+        <th class="p-2">Antall</th>
+        <th class="p-2">Min.</th>
+        <th class="p-2">Pris</th>
+        <th class="p-2">Verdi</th>
+        <th class="p-2 w-48">Handling</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for i in items %}
+      <tr class="odd:bg-zinc-50 align-top cursor-pointer hover:bg-zinc-100"
+    ondblclick="window.location.href='/item/{{ i.id }}/units'">
+        <td class="p-2">
+          <div class="font-medium flex items-center gap-2">
+            {% if i.qty <= i.min_qty %}<span class="inline-block w-2 h-2 rounded-full bg-rose-500" title="Lav beholdning"></span>{% endif %}
+            {% if i.image_path %}<img src="{{ i.image_path }}" class="w-16 h-16 object-cover rounded">{% endif %}
+            {{ i.name }}
+          </div>
+          <div class="text-xs text-zinc-500">{{ i.notes }}</div>
+        </td>
+        <td class="p-2">{{ i.sku }}</td>
+        <td class="p-2">{{ i.category_obj.name if i.category_obj else '' }}</td>
+        <td class="p-2">{{ i.location_obj.name if i.location_obj else '' }}</td>
+        <td class="p-2 font-semibold">{{ i.qty }}</td>
+        <td class="p-2">{{ i.min_qty }}</td>
+        <td class="p-2">{{ i.price|round(2) }} {{ i.currency }}</td>
+        <td class="p-2">{{ (i.price * i.qty)|round(2) }} {{ i.currency }}</td>
+        <td class="p-2">
+          <form hx-post="/item/{{ i.id }}/adjust" hx-include="closest tr" class="flex items-center gap-1 mb-1">
+            <input type="hidden" name="note" value="Justering +">
+            <input class="w-16 px-2 py-1 rounded border border-zinc-300" name="delta" type="number" value="1">
+            <button class="px-2 py-1 rounded border border-zinc-300" type="submit">+ Legg til</button>
+          </form>
+          <form hx-post="/item/{{ i.id }}/adjust" hx-include="closest tr" class="flex items-center gap-1 mb-2">
+            <input type="hidden" name="note" value="Justering -">
+            <input class="w-16 px-2 py-1 rounded border border-zinc-300" name="delta" type="number" value="-1">
+            <button class="px-2 py-1 rounded border border-zinc-300" type="submit">- Trekk</button>
+          </form>
+          <div class="flex items-center gap-2">
+            <a href="/item/{{ i.id }}/edit" class="px-2 py-1 rounded border border-zinc-300">Rediger</a>
+            <form action="/item/{{ i.id }}/delete" method="post" class="inline-flex items-center gap-2"
+      onsubmit="return confirm('Slette {{ i.name }}? Dette kan ikke angres.');">
+  <input name="confirm" class="px-2 py-1 rounded border text-xs" placeholder="skriv 1234" required>
+  <button class="px-2 py-1 rounded bg-rose-600 text-white text-xs">Slett</button>
+</form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+      {% if items|length == 0 %}
+      <tr><td class="p-3 text-zinc-500" colspan="9">Ingen varer funnet.</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Pagination -->
+{% set pages = (total // per_page) + (1 if total % per_page else 0) %}
+{% if pages > 1 %}
+<div class="mt-3 flex items-center gap-2">
+  {% for p in range(1, pages+1) %}
+    <a href="/?q={{ q }}&category={{ category }}&location={{ location }}&sort={{ sort }}&page={{ p }}&per_page={{ per_page }}"
+       class="px-2 py-1 rounded border {% if p==page %}bg-zinc-900 text-white{% else %}border-zinc-300{% endif %}">{{ p }}</a>
+  {% endfor %}
+  <div class="ml-auto text-xs text-zinc-500">{{ total }} totalt</div>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="text-xl font-semibold mb-3">Import / Export</h1>
+<div class="grid md:grid-cols-2 gap-4">
+  <section class="rounded-2xl border border-zinc-200 bg-white p-3">
+    <h2 class="font-semibold mb-2">Importer</h2>
+    <form method="post" action="/import" enctype="multipart/form-data" class="grid gap-2">
+      <label class="grid gap-1">
+        <span class="text-xs text-zinc-500">Fil</span>
+        <input class="px-3 py-2 rounded border border-zinc-300" type="file" name="file" accept=".json,.csv" required>
+      </label>
+      <label class="grid gap-1">
+        <span class="text-xs text-zinc-500">Modus</span>
+        <select class="px-3 py-2 rounded border border-zinc-300" name="mode">
+          <option value="merge">Flett inn</option>
+          <option value="replace">Erstatt alt (sletter eksisterende)</option>
+        </select>
+      </label>
+      <button class="px-3 py-2 rounded bg-zinc-900 text-white" type="submit">Importer</button>
+    </form>
+  </section>
+  <section class="rounded-2xl border border-zinc-200 bg-white p-3">
+    <h2 class="font-semibold mb-2">Eksporter</h2>
+    <div class="flex items-center gap-2">
+      <a class="px-3 py-2 rounded bg-zinc-900 text-white" href="/export.json">Last ned JSON</a>
+      <a class="px-3 py-2 rounded border border-zinc-300" href="/export.csv">Last ned CSV</a>
+    </div>
+  </section>
+</div>
+{% endblock %}

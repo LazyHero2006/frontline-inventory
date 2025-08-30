@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="text-xl font-semibold mb-3">Ordre {{ co.code }}</h1>
+
+<div class="grid md:grid-cols-2 gap-4">
+  <section class="rounded-2xl border border-zinc-200 bg-white p-3">
+    <h2 class="font-semibold mb-2">Linjer</h2>
+    <table class="w-full text-sm">
+      <thead class="bg-zinc-100"><tr><th class="p-2 text-left">Vare-ID</th><th class="p-2">Bestilt</th><th class="p-2">Reservert</th><th class="p-2">Levert</th></tr></thead>
+      <tbody>
+        {% for l in lines %}
+        <tr class="odd:bg-zinc-50"><td class="p-2">{{ l.item_id }}</td><td class="p-2 text-center">{{ l.qty_ordered }}</td><td class="p-2 text-center">{{ l.qty_reserved }}</td><td class="p-2 text-center">{{ l.qty_fulfilled }}</td></tr>
+        {% endfor %}
+        {% if lines|length == 0 %}<tr><td class="p-3 text-zinc-500" colspan="4">Ingen linjer ennå.</td></tr>{% endif %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="rounded-2xl border border-zinc-200 bg-white p-3 space-y-3">
+    <h2 class="font-semibold mb-2">Handlinger</h2>
+    <form method="post" action="/co/{{ co.id }}/release" class="grid grid-cols-3 gap-2">
+      <input name="item_id" class="px-3 py-2 rounded border" placeholder="Item ID" required>
+      <input type="number" name="qty" class="px-3 py-2 rounded border" placeholder="Antall" min="1" value="1" required>
+      <button class="px-3 py-2 rounded bg-amber-600 text-white">Frigi</button>
+    </form>
+    <form method="post" action="/co/{{ co.id }}/fulfill" class="grid grid-cols-3 gap-2">
+      <input name="item_id" class="px-3 py-2 rounded border" placeholder="Item ID" required>
+      <input type="number" name="qty" class="px-3 py-2 rounded border" placeholder="Antall" min="1" value="1" required>
+      <button class="px-3 py-2 rounded bg-emerald-600 text-white">Utlever</button>
+    </form>
+    <div class="text-xs text-zinc-500">Tips: Reserver fra varesiden (Enheter) for å binde konkrete enheter til denne CO.</div>
+  </section>
+</div>
+{% endblock %}
