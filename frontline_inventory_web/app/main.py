@@ -17,7 +17,7 @@ from fastapi import Form
 
 from fastapi import HTTPException, Form
 from fastapi.responses import RedirectResponse, HTMLResponse
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from .db import SessionLocal, engine, Base, ensure_migrations
 from .models import Item, Category, Location, Tx
@@ -230,7 +230,7 @@ async def item_detail(
     print(f"[item_detail] DB={DB_PATH} customers_len={len(customers)} at {datetime.utcnow().isoformat()}")
 
     return templates.TemplateResponse(
-        "item_detail.html",
+        "item_units.html",
         {
             "request": request,
             "item": item,
@@ -442,6 +442,30 @@ def api_new_co(customer_id: int, db: Session = Depends(get_db), current_user = D
     db.add(co)
     db.commit()
     return {"id": co.id, "code": co.code}
+
+# CO-opplysninger for bekreftelse i UI
+@app.get("/api/co/info")
+def api_co_info(code: str, db: Session = Depends(get_db), current_user = Depends(require_user)):
+    code = (code or "").strip()
+    if not code:
+        return {"exists": False}
+    co = db.execute(select(CustomerOrder).where(CustomerOrder.code == code)).scalar_one_or_none()
+    if not co:
+        return {"exists": False}
+    customer = db.get(Customer, co.customer_id) if co.customer_id else None
+    return {
+        "exists": True,
+        "id": co.id,
+        "code": co.code,
+        "customer_id": co.customer_id or None,
+        "customer_name": (customer.name if customer else None),
+        "status": co.status,
+    }
+
+# Neste anbefalte CO-kode (sekvens per år)
+@app.get("/api/co/next_code")
+def api_co_next_code(db: Session = Depends(get_db), current_user = Depends(require_user)):
+    return {"code": crud._gen_co_code(db)}
 
 @app.post("/item/{item_id}/units/reserve")
 async def item_units_reserve(
@@ -663,10 +687,89 @@ def customers_new_post(
     crud.create_customer(db, name=name, email=email, phone=phone, notes=notes)
     return RedirectResponse(url="/customers", status_code=303)
 
+@app.get("/customers/{customer_id}/delete")
+def customers_delete_confirm(request: Request, customer_id: int, db: Session = Depends(get_db), current_user=Depends(require_user)):
+    cust = db.get(Customer, customer_id)
+    if not cust:
+        raise HTTPException(status_code=404)
+    co_cnt = db.execute(select(func.count(CustomerOrder.id)).where(CustomerOrder.customer_id == cust.id)).scalar() or 0
+    return templates.TemplateResponse(
+        "customer_delete.html",
+        {
+            "request": request,
+            "user": current_user,
+            "customer": cust,
+            "co_cnt": int(co_cnt),
+            "error": None,
+        },
+    )
+
+@app.post("/customers/{customer_id}/delete")
+def customers_delete_post(
+    request: Request,
+    customer_id: int,
+    confirm: str = Form(""),
+    delete_cos: str | None = Form(None),
+    db: Session = Depends(get_db),
+    current_user=Depends(require_user),
+):
+    cust = db.get(Customer, customer_id)
+    if not cust:
+        raise HTTPException(status_code=404)
+    try:
+        # Slett tilknyttede CO-er hvis krysset av
+        if delete_cos:
+            crud.delete_customer_orders_for_customer(db, cust.id, confirm_code=confirm.strip())
+        crud.delete_customer(db, cust, confirm_code=confirm.strip())
+        return RedirectResponse(url="/customers", status_code=303)
+    except HTTPException as e:
+        if e.status_code == 400:
+            co_cnt = db.execute(select(func.count(CustomerOrder.id)).where(CustomerOrder.customer_id == cust.id)).scalar() or 0
+            return templates.TemplateResponse(
+                "customer_delete.html",
+                {
+                    "request": request,
+                    "user": current_user,
+                    "customer": cust,
+                    "co_cnt": int(co_cnt),
+                    "error": e.detail,
+                },
+                status_code=400,
+            )
+        raise
+
 @app.get("/co")
-def co_list(request: Request, db: Session = Depends(get_db), current_user=Depends(require_user)):
-    rows = db.execute(select(CustomerOrder).order_by(CustomerOrder.created_at.desc())).scalars().all()
-    return templates.TemplateResponse("co_list.html", {"request": request, "user": current_user, "rows": rows})
+def co_list(
+    request: Request,
+    q: str | None = None,
+    customer_id: int | None = None,
+    status: str | None = None,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_user),
+):
+    stmt = select(CustomerOrder).order_by(CustomerOrder.created_at.desc())
+    if q and q.strip():
+        qs = f"%{q.strip()}%"
+        from sqlalchemy import or_
+        stmt = stmt.where(CustomerOrder.code.ilike(qs))
+    if customer_id:
+        stmt = stmt.where(CustomerOrder.customer_id == customer_id)
+    if status and status.strip():
+        stmt = stmt.where(CustomerOrder.status == status.strip())
+    rows = db.execute(stmt).scalars().all()
+    customers = db.execute(select(Customer).order_by(Customer.name.asc())).scalars().all()
+    return templates.TemplateResponse(
+        "co_list.html",
+        {
+            "request": request,
+            "user": current_user,
+            "rows": rows,
+            "customers": customers,
+            "q": q or "",
+            "selected_customer_id": int(customer_id) if customer_id else None,
+            "selected_status": status or "",
+        },
+    )
 
 @app.get("/co/new")
 def co_new(request: Request, db: Session = Depends(get_db), current_user=Depends(require_user)):
@@ -692,6 +795,57 @@ def co_detail(request: Request, co_id: int, db: Session = Depends(get_db), curre
         raise HTTPException(status_code=404)
     lines = db.execute(select(CustomerOrderLine).where(CustomerOrderLine.co_id == co.id)).scalars().all()
     return templates.TemplateResponse("co_detail.html", {"request": request, "user": current_user, "co": co, "lines": lines})
+
+@app.get("/co/{co_id}/delete")
+def co_delete_confirm(request: Request, co_id: int, db: Session = Depends(get_db), current_user=Depends(require_user)):
+    co = db.get(CustomerOrder, co_id)
+    if not co:
+        raise HTTPException(status_code=404)
+    reserved_cnt = db.execute(select(func.count(ItemUnit.id)).where(ItemUnit.reserved_co_id == co.id, ItemUnit.status.in_(("reserved","reservert")))).scalar() or 0
+    lines_cnt = db.execute(select(func.count(CustomerOrderLine.id)).where(CustomerOrderLine.co_id == co.id)).scalar() or 0
+    return templates.TemplateResponse(
+        "co_delete.html",
+        {
+            "request": request,
+            "user": current_user,
+            "co": co,
+            "reserved_cnt": int(reserved_cnt),
+            "lines_cnt": int(lines_cnt),
+            "error": None,
+        },
+    )
+
+@app.post("/co/{co_id}/delete")
+def co_delete_post(
+    request: Request,
+    co_id: int,
+    confirm: str = Form(""),
+    db: Session = Depends(get_db),
+    current_user=Depends(require_user),
+):
+    co = db.get(CustomerOrder, co_id)
+    if not co:
+        raise HTTPException(status_code=404)
+    try:
+        crud.delete_customer_order(db, co, confirm_code=confirm.strip())
+        return RedirectResponse(url="/co", status_code=303)
+    except HTTPException as e:
+        if e.status_code == 400:
+            reserved_cnt = db.execute(select(func.count(ItemUnit.id)).where(ItemUnit.reserved_co_id == co.id, ItemUnit.status.in_(("reserved","reservert")))).scalar() or 0
+            lines_cnt = db.execute(select(func.count(CustomerOrderLine.id)).where(CustomerOrderLine.co_id == co.id)).scalar() or 0
+            return templates.TemplateResponse(
+                "co_delete.html",
+                {
+                    "request": request,
+                    "user": current_user,
+                    "co": co,
+                    "reserved_cnt": int(reserved_cnt),
+                    "lines_cnt": int(lines_cnt),
+                    "error": e.detail,
+                },
+                status_code=400,
+            )
+        raise
 
 @app.post("/item/{item_id}/reserve")
 def item_reserve(
@@ -734,4 +888,76 @@ def co_fulfill(
     if not co or not item:
         raise HTTPException(status_code=404)
     crud.fulfill_units(db, item, co, qty=int(qty), note=note, actor=current_user)
+    return RedirectResponse(url=f"/co/{co.id}", status_code=303)
+
+@app.post("/co/{co_id}/reserve")
+def co_reserve(
+    request: Request, co_id: int,
+    item_id: int = Form(...),
+    qty: int = Form(...),
+    note: str = Form("Reservert"),
+    db: Session = Depends(get_db), current_user=Depends(require_user)
+):
+    co = db.get(CustomerOrder, co_id); item = db.get(Item, int(item_id))
+    if not co or not item:
+        raise HTTPException(status_code=404)
+    crud.reserve_qty_for_customer(db, item_id=item.id, qty=int(qty), customer_id=(co.customer_id or 0), note=note, actor=current_user, co_id=co.id)
+    return RedirectResponse(url=f"/co/{co.id}", status_code=303)
+
+@app.post("/co/{co_id}/unfulfill")
+def co_unfulfill(
+    request: Request, co_id: int,
+    item_id: int = Form(...),
+    qty: int = Form(...),
+    note: str = Form("Tilbakeført"),
+    db: Session = Depends(get_db), current_user=Depends(require_user)
+):
+    co = db.get(CustomerOrder, co_id); item = db.get(Item, int(item_id))
+    if not co or not item:
+        raise HTTPException(status_code=404)
+    crud.unfulfill_units(db, item, co, qty=int(qty), note=note, actor=current_user)
+    return RedirectResponse(url=f"/co/{co.id}", status_code=303)
+
+@app.post("/co/{co_id}/line/order")
+def co_line_order(
+    request: Request, co_id: int,
+    item_id: int = Form(...),
+    qty: int = Form(...),
+    note: str = Form("Bestilt"),
+    db: Session = Depends(get_db), current_user=Depends(require_user)
+):
+    co = db.get(CustomerOrder, co_id); item = db.get(Item, int(item_id))
+    if not co or not item:
+        raise HTTPException(status_code=404)
+    line = crud.ensure_line(db, co, item)
+    line.qty = (line.qty or 0) + int(qty)
+    db.add(Tx(item_id=item.id, sku=item.sku, name=item.name, delta=0, note=f"{note} {qty} stk for CO {co.code}", co_id=co.id, user_id=None, user_name=None))
+    db.commit()
+    return RedirectResponse(url=f"/co/{co.id}", status_code=303)
+
+@app.post("/co/{co_id}/line/delete")
+def co_line_delete(
+    request: Request, co_id: int,
+    item_id: int = Form(...),
+    db: Session = Depends(get_db), current_user=Depends(require_user)
+):
+    co = db.get(CustomerOrder, co_id); item = db.get(Item, int(item_id))
+    if not co or not item:
+        raise HTTPException(status_code=404)
+    crud.delete_co_line(db, co, item, actor=current_user)
+    return RedirectResponse(url=f"/co/{co.id}", status_code=303)
+
+@app.post("/co/{co_id}/receive")
+def co_receive(
+    request: Request, co_id: int,
+    item_id: int = Form(...),
+    qty: int = Form(...),
+    po_code: str = Form(...),
+    note: str = Form("Mottak"),
+    db: Session = Depends(get_db), current_user=Depends(require_user)
+):
+    co = db.get(CustomerOrder, co_id); item = db.get(Item, int(item_id))
+    if not co or not item:
+        raise HTTPException(status_code=404)
+    crud.create_units_for_receive(db, item, qty=int(qty), po_code=po_code.strip(), note=f"{note} (CO {co.code})", actor=current_user)
     return RedirectResponse(url=f"/co/{co.id}", status_code=303)

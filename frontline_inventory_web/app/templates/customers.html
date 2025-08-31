@@ -5,13 +5,25 @@
 <div class="rounded-2xl border border-zinc-200 bg-white overflow-hidden">
   <table class="w-full text-sm">
     <thead class="bg-zinc-100">
-      <tr><th class="p-2 text-left">Navn</th><th class="p-2 text-left">E-post</th><th class="p-2 text-left">Telefon</th></tr>
+      <tr>
+        <th class="p-2 text-left">Navn</th>
+        <th class="p-2 text-left">E-post</th>
+        <th class="p-2 text-left">Telefon</th>
+        <th class="p-2 text-right">Handling</th>
+      </tr>
     </thead>
     <tbody>
       {% for c in rows %}
-      <tr class="odd:bg-zinc-50"><td class="p-2">{{ c.name }}</td><td class="p-2">{{ c.email }}</td><td class="p-2">{{ c.phone }}</td></tr>
+      <tr class="odd:bg-zinc-50">
+        <td class="p-2">{{ c.name }}</td>
+        <td class="p-2">{{ c.email }}</td>
+        <td class="p-2">{{ c.phone }}</td>
+        <td class="p-2 text-right">
+          <a href="/customers/{{ c.id }}/delete" class="px-2 py-1 rounded border">Slett</a>
+        </td>
+      </tr>
       {% endfor %}
-      {% if rows|length == 0 %}<tr><td class="p-3 text-zinc-500" colspan="3">Ingen kunder.</td></tr>{% endif %}
+      {% if rows|length == 0 %}<tr><td class="p-3 text-zinc-500" colspan="4">Ingen kunder.</td></tr>{% endif %}
     </tbody>
   </table>
 </div>

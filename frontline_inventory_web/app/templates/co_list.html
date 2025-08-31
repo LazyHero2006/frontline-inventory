@@ -1,17 +1,54 @@
 {% extends "base.html" %}
 {% block content %}
 <h1 class="text-xl font-semibold mb-3">Kundeordre</h1>
-<div class="mb-3"><a class="px-3 py-2 rounded bg-zinc-900 text-white" href="/co/new">+ Ny ordre</a></div>
+
+<form method="get" class="mb-3 flex flex-wrap gap-2 items-end">
+  <div>
+    <label class="block text-xs text-zinc-600">Søk (kode)</label>
+    <input type="text" name="q" value="{{ q }}" class="px-3 py-2 rounded border" placeholder="CO-2025-001">
+  </div>
+  <div>
+    <label class="block text-xs text-zinc-600">Kunde</label>
+    <select name="customer_id" class="px-3 py-2 rounded border min-w-48">
+      <option value="">Alle</option>
+      {% if customers %}
+        {% for c in customers %}
+          <option value="{{ c.id }}" {% if selected_customer_id and selected_customer_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+        {% endfor %}
+      {% endif %}
+    </select>
+  </div>
+  <div>
+    <label class="block text-xs text-zinc-600">Status</label>
+    <select name="status" class="px-3 py-2 rounded border">
+      <option value="" {% if not selected_status %}selected{% endif %}>Alle</option>
+      <option value="open" {% if selected_status == 'open' %}selected{% endif %}>Open</option>
+      <option value="closed" {% if selected_status == 'closed' %}selected{% endif %}>Closed</option>
+      <option value="cancelled" {% if selected_status == 'cancelled' %}selected{% endif %}>Cancelled</option>
+    </select>
+  </div>
+  <div class="flex gap-2">
+    <button class="px-3 py-2 rounded border">Filtrer</button>
+    <a class="px-3 py-2 rounded border" href="/co">Nullstill</a>
+  </div>
+  <div class="ml-auto">
+    <a class="px-3 py-2 rounded bg-zinc-900 text-white" href="/co/new">+ Ny ordre</a>
+  </div>
+</form>
+
 <div class="rounded-2xl border border-zinc-200 bg-white overflow-hidden">
   <table class="w-full text-sm">
-    <thead class="bg-zinc-100"><tr><th class="p-2 text-left">Kode</th><th class="p-2 text-left">Kunde</th><th class="p-2 text-left">Status</th><th class="p-2"></th></tr></thead>
+    <thead class="bg-zinc-100"><tr><th class="p-2 text-left">Kode</th><th class="p-2 text-left">Kunde</th><th class="p-2 text-left">Status</th><th class="p-2 text-right">Handling</th></tr></thead>
     <tbody>
       {% for co in rows %}
       <tr class="odd:bg-zinc-50">
-        <td class="p-2">{{ co.code }}</td>
-        <td class="p-2">{{ co.customer_id }}</td>
+        <td class="p-2"><a href="/co/{{ co.id }}" class="underline hover:no-underline">{{ co.code }}</a></td>
+        <td class="p-2">{{ co.customer.name if co.customer else '' }}</td>
         <td class="p-2">{{ co.status }}</td>
-        <td class="p-2 text-right"><a class="text-zinc-900 hover:underline" href="/co/{{ co.id }}">Åpne</a></td>
+        <td class="p-2 text-right">
+          <a class="px-2 py-1 rounded border mr-2" href="/co/{{ co.id }}">Åpne</a>
+          <a class="px-2 py-1 rounded border" href="/co/{{ co.id }}/delete">Slett</a>
+        </td>
       </tr>
       {% endfor %}
       {% if rows|length == 0 %}<tr><td class="p-3 text-zinc-500" colspan="4">Ingen ordre.</td></tr>{% endif %}

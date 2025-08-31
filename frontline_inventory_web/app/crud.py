@@ -106,7 +106,7 @@ def reserve_qty_for_customer(
     # Marker enheter + logg transaksjoner pr enhet
     reserved_now = 0
     for u in units[:take]:
-        u.status = "reservert"
+        u.status = "reserved"
         u.reserved_co_id = co.id
         tx = Tx(
             item_id=item.id,
@@ -211,7 +211,11 @@ def release_units(db: Session, item: Item, co: CustomerOrder, qty: int, note: st
         return
     # Finn reserverte enheter på denne CO
     units = db.execute(
-        select(ItemUnit).where(ItemUnit.item_id == item.id, ItemUnit.status == "reserved", ItemUnit.reserved_co_id == co.id).limit(qty)
+        select(ItemUnit).where(
+            ItemUnit.item_id == item.id,
+            ItemUnit.status.in_(("reserved", "reservert")),
+            ItemUnit.reserved_co_id == co.id
+        ).limit(qty)
     ).scalars().all()
     if len(units) < qty:
         raise HTTPException(status_code=400, detail=f"For få reserverte å frigi. Reservert: {len(units)}, ønsket: {qty}")
@@ -238,7 +242,11 @@ def fulfill_units(db: Session, item: Item, co: CustomerOrder, qty: int, note: st
 
     # Ta fra reserverte først
     reserved = db.execute(
-        select(ItemUnit).where(ItemUnit.item_id == item.id, ItemUnit.status == "reserved", ItemUnit.reserved_co_id == co.id).limit(qty)
+        select(ItemUnit).where(
+            ItemUnit.item_id == item.id,
+            ItemUnit.status.in_(("reserved", "reservert")),
+            ItemUnit.reserved_co_id == co.id
+        ).limit(qty)
     ).scalars().all()
     if len(reserved) < qty:
         raise HTTPException(status_code=400, detail=f"Mangler reserverte enheter. Reservert: {len(reserved)}, ønsket: {qty}")
@@ -287,6 +295,67 @@ def get_or_create_location(db: Session, name: str | None) -> Optional[Location]:
         db.refresh(loc)
     return loc
 
+
+def unfulfill_units(db: Session, item: Item, co: CustomerOrder, qty: int, note: str = "", actor: User | None = None) -> Tx:
+    qty = max(0, int(qty))
+    if qty == 0:
+        raise HTTPException(status_code=400, detail="Angi antall > 0")
+
+    used = db.execute(
+        select(ItemUnit).where(
+            ItemUnit.item_id == item.id,
+            ItemUnit.status == "used",
+            ItemUnit.reserved_co_id == co.id,
+        ).limit(qty)
+    ).scalars().all()
+    if len(used) < qty:
+        raise HTTPException(status_code=400, detail=f"Finner ikke nok utleverte enheter å trekke. Utlevert: {len(used)}, ønsket: {qty}")
+
+    for u in used:
+        u.status = "available"
+        u.used_at = None
+
+    line = ensure_line(db, co, item)
+    take = len(used)
+    line.qty_fulfilled = max(0, (line.qty_fulfilled or 0) - take)
+
+    # Legg tilbake på lager
+    item.qty = (item.qty or 0) + take
+    item.last_updated = datetime.utcnow()
+
+    tx = Tx(
+        item_id=item.id,
+        sku=item.sku,
+        name=item.name,
+        delta=take,
+        note=note or f"Tilbakeført {take} stk (CO {co.code})",
+        co_id=co.id,
+        user_id=(actor.id if actor else None),
+        user_name=(actor.name if actor else None),
+    )
+    db.add_all([item, tx])
+    db.commit(); db.refresh(tx)
+    return tx
+
+def delete_co_line(db: Session, co: CustomerOrder, item: Item, actor: User | None = None) -> None:
+    line = db.execute(select(CustomerOrderLine).where(CustomerOrderLine.co_id == co.id, CustomerOrderLine.item_id == item.id)).scalar_one_or_none()
+    if not line:
+        return
+    # Frigi reserverte enheter
+    units = db.execute(
+        select(ItemUnit).where(
+            ItemUnit.item_id == item.id,
+            ItemUnit.status.in_(("reserved","reservert")),
+            ItemUnit.reserved_co_id == co.id,
+        )
+    ).scalars().all()
+    for u in units:
+        u.status = "available"
+        u.reserved_co_id = None
+    # Nullstill linje og slett
+    line.qty = 0; line.qty_reserved = 0; line.qty_fulfilled = 0
+    db.delete(line)
+    db.commit()
 
 def create_item(db: Session, actor: Optional[User] = None, **data) -> Item:
     """
@@ -410,6 +479,65 @@ def inventory_stats(db: Session) -> Tuple[int, float]:
     return total_items or 0, float(total_value or 0.0)
 
 
+def delete_customer(db: Session, customer: Customer, confirm_code: str | None = None) -> None:
+    co_cnt = db.execute(select(func.count(CustomerOrder.id)).where(CustomerOrder.customer_id == customer.id)).scalar() or 0
+
+    if co_cnt > 0 and confirm_code != "1234":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Kunden har {co_cnt} kundeordre(r). Skriv 1234 for å bekrefte sletting. Dette kan ikke angres."
+        )
+
+    # Frikoble CO-er
+    if co_cnt > 0:
+        db.execute(update(CustomerOrder).where(CustomerOrder.customer_id == customer.id).values(customer_id=None))
+
+    # Slett kunden
+    db.delete(customer)
+    db.commit()
+
+
+def delete_customer_order(db: Session, co: CustomerOrder, confirm_code: str | None = None) -> None:
+    # Finn reserverte enheter og linjer for sikkerhetsbekreftelse
+    reserved_cnt = db.execute(
+        select(func.count(ItemUnit.id)).where(
+            ItemUnit.reserved_co_id == co.id,
+            ItemUnit.status.in_(("reserved", "reservert"))
+        )
+    ).scalar() or 0
+    lines_cnt = db.execute(select(func.count(CustomerOrderLine.id)).where(CustomerOrderLine.co_id == co.id)).scalar() or 0
+
+    if (reserved_cnt > 0 or lines_cnt > 0) and confirm_code != "1234":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ordren har {reserved_cnt} reserverte enhet(er) og {lines_cnt} linje(r). Skriv 1234 for å bekrefte sletting."
+        )
+
+    # Frigi reserverte enheter og fjern koblinger
+    db.execute(
+        update(ItemUnit)
+        .where(ItemUnit.reserved_co_id == co.id, ItemUnit.status.in_(("reserved", "reservert")))
+        .values(status="available", reserved_co_id=None)
+    )
+    # Null ut co-kobling for alle enheter (inkl. used)
+    db.execute(update(ItemUnit).where(ItemUnit.reserved_co_id == co.id).values(reserved_co_id=None))
+    # Null ut Tx.co_id for historikk (vi beholder transaksjoner)
+    db.execute(update(Tx).where(Tx.co_id == co.id).values(co_id=None))
+    db.commit()
+
+    # Slett ordre (linjer slettes pga cascade)
+    db.delete(co)
+    db.commit()
+
+
+def delete_customer_orders_for_customer(db: Session, customer_id: int, confirm_code: str | None = None) -> int:
+    rows = db.execute(select(CustomerOrder).where(CustomerOrder.customer_id == customer_id)).scalars().all()
+    n = 0
+    for co in rows:
+        delete_customer_order(db, co, confirm_code=confirm_code)
+        n += 1
+    return n
+
 def get_or_create_po(db: Session, code: str, supplier: str = "") -> PurchaseOrder:
     code = code.strip()
     po = db.execute(select(PurchaseOrder).where(PurchaseOrder.code == code)).scalar_one_or_none()
@@ -418,12 +546,20 @@ def get_or_create_po(db: Session, code: str, supplier: str = "") -> PurchaseOrde
         db.add(po); db.commit(); db.refresh(po)
     return po
 
-def get_or_create_co(db: Session, code: str, customer: str = "") -> CustomerOrder:
+def get_or_create_co(db: Session, code: str, customer: Customer | None = None) -> CustomerOrder:
     code = code.strip()
     co = db.execute(select(CustomerOrder).where(CustomerOrder.code == code)).scalar_one_or_none()
-    if not co:
-        co = CustomerOrder(code=code, customer=customer or "")
-        db.add(co); db.commit(); db.refresh(co)
+    if co:
+        return co
+    co = CustomerOrder(
+        code=code,
+        customer_id=(customer.id if customer else None),
+        status="open",
+        created_at=datetime.utcnow(),
+    )
+    db.add(co)
+    db.commit()
+    db.refresh(co)
     return co
 
 def create_units_for_receive(
@@ -501,12 +637,16 @@ def reserve_units(db: Session, unit_ids: Iterable[int], co_code: str, note: str,
             u.status = "reserved"
             u.reserved_co_id = co.id
             by_item[u.item_id].append(u)
-    # Audit (delta=0 pr vare)
+    # Oppdater ordrelinjer og audit per vare
     for item_id, units in by_item.items():
         item = db.get(Item, item_id)
+        k = len(units)
+        line = ensure_line(db, co, item)
+        line.qty = (line.qty or 0) + k
+        line.qty_reserved = (line.qty_reserved or 0) + k
         db.add(Tx(
             item_id=item_id, sku=item.sku, name=item.name, delta=0,
-            note=(note or "Reservert") + f" {len(units)} stk (CO {co.code})",
+            note=(note or "Reservert") + f" {k} stk (CO {co.code})",
             co_id=co.id, user_id=(actor.id if actor else None), user_name=(actor.name if actor else None),
         ))
     db.commit()
@@ -515,21 +655,28 @@ def reserve_units(db: Session, unit_ids: Iterable[int], co_code: str, note: str,
 def unreserve_units(db: Session, unit_ids: Iterable[int], note: str, actor: Optional[User]) -> int:
     ids = list(map(int, unit_ids))
     rows = db.execute(select(ItemUnit).where(ItemUnit.id.in_(ids))).scalars().all()
-    by_item: Dict[int, List[ItemUnit]] = defaultdict(list)
+    # grupper per (co_id, item_id) slik at CO-linjer oppdateres korrekt
+    by_co_item: Dict[tuple[int, int], List[ItemUnit]] = defaultdict(list)
     for u in rows:
-        if u.status == "reserved":
-            by_item[u.item_id].append(u)
+        if u.status in ("reserved", "reservert") and u.reserved_co_id:
+            by_co_item[(int(u.reserved_co_id), int(u.item_id))].append(u)
             u.status = "available"
             u.reserved_co_id = None
-    for item_id, units in by_item.items():
+    total = 0
+    for (co_id, item_id), units in by_co_item.items():
+        total += len(units)
         item = db.get(Item, item_id)
+        co = db.get(CustomerOrder, co_id)
+        if co and item:
+            line = ensure_line(db, co, item)
+            line.qty_reserved = max(0, (line.qty_reserved or 0) - len(units))
         db.add(Tx(
-            item_id=item_id, sku=item.sku, name=item.name, delta=0,
+            item_id=item_id, sku=(item.sku if item else ""), name=(item.name if item else ""), delta=0,
             note=(note or "Opphevet reservasjon") + f" {len(units)} stk",
-            user_id=(actor.id if actor else None), user_name=(actor.name if actor else None),
+            co_id=co_id, user_id=(actor.id if actor else None), user_name=(actor.name if actor else None),
         ))
     db.commit()
-    return sum(len(v) for v in by_item.values())
+    return total
 
 def issue_units(db: Session, unit_ids: Iterable[int], co_code: str, note: str, actor: Optional[User]) -> int:
     co = get_or_create_co(db, co_code)
@@ -555,6 +702,10 @@ def issue_units(db: Session, unit_ids: Iterable[int], co_code: str, note: str, a
         # trekk fra lager
         item.qty = max(0, (item.qty or 0) - k)
         item.last_updated = datetime.utcnow()
+        # oppdater CO-linje
+        line = ensure_line(db, co, item)
+        line.qty_fulfilled = (line.qty_fulfilled or 0) + k
+        line.qty_reserved = max(0, (line.qty_reserved or 0) - k)
         # audit (delta=-k)
         db.add_all([
             item,

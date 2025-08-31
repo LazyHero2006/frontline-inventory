@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="text-xl font-semibold mb-3">Slett kunde</h1>
+
+<div class="rounded-2xl border bg-white p-4 max-w-2xl">
+  {% if error %}
+    <div class="mb-3 p-3 rounded bg-rose-50 border border-rose-200 text-rose-800 text-sm">{{ error }}</div>
+  {% endif %}
+  <div class="mb-3">
+    <div class="text-sm text-zinc-600">Navn</div>
+    <div class="font-medium">{{ customer.name }}</div>
+  </div>
+  <div class="mb-3 grid grid-cols-2 gap-4 text-sm">
+    <div><div class="text-zinc-600">E‑post</div><div>{{ customer.email or '—' }}</div></div>
+    <div><div class="text-zinc-600">Telefon</div><div>{{ customer.phone or '—' }}</div></div>
+  </div>
+  <div class="mb-4 p-3 rounded border {{ 'border-amber-300 bg-amber-50 text-amber-800' if co_cnt > 0 else 'border-zinc-200 bg-zinc-50 text-zinc-700' }}">
+    {% if co_cnt > 0 %}
+      Denne kunden har <b>{{ co_cnt }}</b> kundeordre knyttet til seg. 
+      Du kan velge å <b>slette</b> disse ordrene, eller bare <b>frikoble</b> dem fra kunden.
+    {% else %}
+      Ingen kundeordre er knyttet til denne kunden.
+    {% endif %}
+  </div>
+
+  <form method="post" class="flex flex-wrap items-end gap-3">
+    <div>
+      <label class="block text-xs text-zinc-600">Bekreftelseskode</label>
+      <input name="confirm" class="px-3 py-2 rounded border" placeholder="Skriv 1234" />
+    </div>
+    {% if co_cnt > 0 %}
+    <label class="inline-flex items-center gap-2 text-sm">
+      <input type="checkbox" name="delete_cos" value="1" class="rounded border"> Slett også alle {{ co_cnt }} tilknyttede ordre
+    </label>
+    {% endif %}
+    <button class="px-3 py-2 rounded bg-rose-600 text-white">Slett kunden</button>
+    <a class="px-3 py-2 rounded border" href="/customers">Avbryt</a>
+  </form>
+</div>
+{% endblock %}

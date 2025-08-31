@@ -5,49 +5,64 @@
   {{ item.name }} <span class="text-zinc-500 text-base">({{ item.sku }})</span>
 </h1>
 
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+<!-- Toppseksjon: bilde + nøkkeltall -->
+<div class="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-4">
+  <div class="rounded-2xl border bg-white overflow-hidden flex items-center justify-center p-2">
+    {% if item.image_path %}
+      <img src="{{ item.image_path }}" alt="{{ item.name }}" class="w-full h-44 object-contain bg-white">
+    {% else %}
+      <div class="w-full h-44 flex items-center justify-center text-zinc-400">Ingen bilde</div>
+    {% endif %}
+  </div>
   <div class="rounded-2xl border p-4 bg-white"><div class="text-sm text-zinc-600">Ledig</div><div class="text-2xl font-bold">{{ count_avail }}</div></div>
   <div class="rounded-2xl border p-4 bg-white"><div class="text-sm text-zinc-600">Reservert</div><div class="text-2xl font-bold">{{ count_res }}</div></div>
   <div class="rounded-2xl border p-4 bg-white"><div class="text-sm text-zinc-600">Brukt</div><div class="text-2xl font-bold">{{ count_used }}</div></div>
 </div>
 
-<form method="post" action="/item/{{ item.id }}/reserve_customer" class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end mb-3">
-  <div>
-    <label class="block text-sm text-gray-600">Kunde</label>
-    <select id="customer_select" name="customer_id" class="px-3 py-2 rounded border w-full" required>
-      <option value="" disabled selected>Velg kunde…</option>
-      {% if customers is defined %}
-        {% for c in customers %}
+<!-- Reserver til kunde -->
+<div class="rounded-2xl border p-4 bg-white mb-4">
+  <h2 class="font-semibold mb-2">Reserver til kunde</h2>
+  <form method="post" action="/item/{{ item.id }}/reserve_customer" class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+    <div>
+      <label class="block text-sm text-gray-600">Kunde</label>
+      <select id="customer_select" name="customer_id" class="px-3 py-2 h-10 rounded border w-full" required>
+        <option value="" disabled selected>Velg kunde…</option>
+        {% if customers is defined %}
+          {% for c in customers %}
           <option value="{{ c.id }}">{{ c.name }}{% if c.email %} – {{ c.email }}{% endif %}</option>
-        {% endfor %}
-      {% endif %}
-    </select>
-  </div>
-
-  <div>
-    <label class="block text-sm text-gray-600">Kundeordre</label>
-    <div class="flex gap-2">
-      <select id="co_select" name="co_id" class="px-3 py-2 rounded border w-full min-w-40">
-        <option value="">Ny åpen ordre (auto)</option>
+          {% endfor %}
+        {% endif %}
       </select>
-      <button type="button" id="new_co_btn" class="px-3 py-2 rounded border">+ Ny</button>
     </div>
-  </div>
 
-  <div>
-    <label class="block text-sm text-gray-600">Antall</label>
-    <input type="number" min="1" name="qty" value="1" class="px-3 py-2 rounded border w-full" />
-  </div>
+    <div>
+      <label class="block text-sm text-gray-600">Kundeordre</label>
+      <div class="flex gap-2 items-end">
+        <select id="co_select" name="co_id" class="px-3 py-2 h-10 rounded border w-full min-w-40">
+          <option value="">Ny åpen ordre (auto)</option>
+        </select>
+        <button type="button" id="new_co_btn" class="px-3 py-2 h-10 rounded border whitespace-nowrap flex items-center gap-1 shrink-0">
+          <span class="text-lg leading-none">+</span>
+          <span>Ny</span>
+        </button>
+      </div>
+    </div>
 
-  <div class="md:col-span-1 md:col-start-4">
-    <label class="block text-sm text-gray-600">Notat</label>
-    <input type="text" name="note" value="Reservert" class="px-3 py-2 rounded border w-full" />
-  </div>
+    <div>
+      <label class="block text-sm text-gray-600">Antall</label>
+      <input type="number" min="1" name="qty" value="1" class="px-3 py-2 h-10 rounded border w-full" />
+    </div>
 
-  <div class="md:col-span-4">
-    <button class="px-3 py-2 rounded bg-zinc-900 text-white">Reserver</button>
-  </div>
-</form>
+    <div>
+      <label class="block text-sm text-gray-600">Notat</label>
+      <input type="text" name="note" value="Reservert" class="px-3 py-2 h-10 rounded border w-full" />
+    </div>
+
+    <div class="md:col-span-5">
+      <button class="px-3 py-2 rounded bg-zinc-900 text-white">Reserver</button>
+    </div>
+  </form>
+</div>
 
 <!-- Mottak (opprett enheter) -->
 <div class="rounded-2xl border p-4 bg-white mb-4">
@@ -94,6 +109,7 @@
     </div>
   </div>
 
+  <div class="overflow-x-auto">
   <table class="w-full text-sm">
     <thead class="bg-zinc-100">
       <tr class="text-left">
@@ -112,12 +128,16 @@
         <td class="p-2"><input type="checkbox" class="rowcb" value="{{ u.id }}" {% if u.status == 'used' %}disabled{% endif %}></td>
         <td class="p-2">{{ u.id }}</td>
         <td class="p-2">
-          {% if u.status in ('available','ledig') %}<span class="text-emerald-700 font-medium">ledig</span>
-          {% elif u.status in ('reserved','reservert') %}<span class="text-amber-700 font-medium">reservert</span>
-          {% else %}<span class="text-rose-700 font-medium">brukt</span>{% endif %}
+          {% if u.status in ('available','ledig') %}
+            <span class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">ledig</span>
+          {% elif u.status in ('reserved','reservert') %}
+            <span class="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">reservert</span>
+          {% else %}
+            <span class="px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">brukt</span>
+          {% endif %}
         </td>
         <td class="p-2">{% if u.po %}{{ u.po.code }}{% endif %}</td>
-        <td class="p-2">{% if u.reserved_co %}{{ u.reserved_co.code }}{% endif %}</td>
+        <td class="p-2">{% if u.reserved_co %}<a href="/co/{{ u.reserved_co.id }}" class="underline hover:no-underline">{{ u.reserved_co.code }}</a>{% endif %}</td>
         <td class="p-2 whitespace-nowrap">{{ u.created_at.strftime('%Y-%m-%d %H:%M') if u.created_at }}</td>
         <td class="p-2 whitespace-nowrap">{% if u.used_at %}{{ u.used_at.strftime('%Y-%m-%d %H:%M') }}{% endif %}</td>
       </tr>
@@ -127,6 +147,7 @@
       {% endif %}
     </tbody>
   </table>
+  </div>
 </div>
 
 <script>
@@ -170,6 +191,39 @@
 </script>
 
 <script>
+  // Bekreft CO-kode ved reservasjon fra enhetslisten
+  (function(){
+    const form = document.getElementById('reserveForm');
+    if (!form) return;
+    form.addEventListener('submit', async (e) => {
+      const codeInput = form.querySelector('input[name="co_code"]');
+      const code = (codeInput?.value || '').trim();
+      if (!code) return; // required håndterer tom verdi
+      try {
+        const r = await fetch(`/api/co/info?code=${encodeURIComponent(code)}`, { credentials: 'same-origin' });
+        if (!r.ok) return; // la server feile normalt
+        const info = await r.json();
+        if (info.exists) {
+          if (info.customer_id) {
+            const ok = confirm(`Ordre ${info.code} tilhører kunden ${info.customer_name}. Reservere på denne?`);
+            if (!ok) { e.preventDefault(); return; }
+          }
+        } else {
+          // Foreslå neste kode
+          const r2 = await fetch('/api/co/next_code', { credentials: 'same-origin' });
+          if (r2.ok) {
+            const sug = await r2.json();
+            const ok2 = confirm(`CO-koden finnes ikke. Bruke forslag: ${sug.code}?`);
+            if (!ok2) { e.preventDefault(); return; }
+            codeInput.value = sug.code;
+          }
+        }
+      } catch (err) {
+        console.error('CO-sjekk feilet', err);
+      }
+    });
+  })();
+
   // 1) Fyll kundelista via API hvis server ikke sendte customers
   (async () => {
     const sel = document.getElementById('customer_select');

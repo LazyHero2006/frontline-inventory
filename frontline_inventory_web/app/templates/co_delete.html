@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="text-xl font-semibold mb-3">Slett kundeordre</h1>
+
+<div class="rounded-2xl border bg-white p-4 max-w-2xl">
+  {% if error %}
+    <div class="mb-3 p-3 rounded bg-rose-50 border border-rose-200 text-rose-800 text-sm">{{ error }}</div>
+  {% endif %}
+  <div class="mb-2 text-sm text-zinc-600">Kode</div>
+  <div class="font-medium mb-3">{{ co.code }}</div>
+  <div class="mb-3 text-sm">Kunde: {{ co.customer.name if co.customer else '—' }}</div>
+
+  <div class="mb-4 p-3 rounded border {{ 'border-amber-300 bg-amber-50 text-amber-800' if (reserved_cnt>0 or lines_cnt>0) else 'border-zinc-200 bg-zinc-50 text-zinc-700' }}">
+    Denne ordren har <b>{{ lines_cnt }}</b> linje(r) og <b>{{ reserved_cnt }}</b> reserverte enhet(er). 
+    Ved sletting blir reserverte enheter frigitt automatisk, og linjene slettes. Dette kan ikke angres.
+  </div>
+
+  <form method="post" class="flex items-end gap-3">
+    <div>
+      <label class="block text-xs text-zinc-600">Bekreftelseskode</label>
+      <input name="confirm" class="px-3 py-2 rounded border" placeholder="Skriv 1234" />
+    </div>
+    <button class="px-3 py-2 rounded bg-rose-600 text-white">Slett ordre</button>
+    <a class="px-3 py-2 rounded border" href="/co/{{ co.id }}">Avbryt</a>
+  </form>
+</div>
+{% endblock %}
+
