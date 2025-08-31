@@ -1,87 +1,55 @@
 {% extends "base.html" %}
 {% block content %}
 
-<h1 class="text-xl font-semibold mb-3">{{ item.name }} <span class="text-zinc-500 text-base">({{ item.sku }})</span></h1>
-
-{% if customers is defined %}
-  <div class="text-xs text-zinc-500 mb-2">Kunder i render: {{ customers|length }}</div>
-{% else %}
-  <div class="text-xs text-rose-600 mb-2">customers IKKE i context</div>
-{% endif %}
-<div data-probe="ITEM-DETAIL-TEMPLATE-AKTIV" class="hidden"></div>
+<h1 class="text-xl font-semibold mb-3">
+  {{ item.name }} <span class="text-zinc-500 text-base">({{ item.sku }})</span>
+</h1>
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-  <div class="rounded-2xl border p-4 bg-white">
-    <div class="text-sm text-zinc-600">Ledig</div>
-    <div class="text-2xl font-bold">{{ count_avail }}</div>
-  </div>
-  <div class="rounded-2xl border p-4 bg-white">
-    <div class="text-sm text-zinc-600">Reservert</div>
-    <div class="text-2xl font-bold">{{ count_res }}</div>
-  </div>
-  <div class="rounded-2xl border p-4 bg-white">
-    <div class="text-sm text-zinc-600">Brukt</div>
-    <div class="text-2xl font-bold">{{ count_used }}</div>
-  </div>
+  <div class="rounded-2xl border p-4 bg-white"><div class="text-sm text-zinc-600">Ledig</div><div class="text-2xl font-bold">{{ count_avail }}</div></div>
+  <div class="rounded-2xl border p-4 bg-white"><div class="text-sm text-zinc-600">Reservert</div><div class="text-2xl font-bold">{{ count_res }}</div></div>
+  <div class="rounded-2xl border p-4 bg-white"><div class="text-sm text-zinc-600">Brukt</div><div class="text-2xl font-bold">{{ count_used }}</div></div>
 </div>
 
-<form method="post" action="/item/{{ item.id }}/reserve_customer" class="flex gap-3 items-end mb-3">
-  <div class="flex-1">
+<form method="post" action="/item/{{ item.id }}/reserve_customer" class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end mb-3">
+  <div>
     <label class="block text-sm text-gray-600">Kunde</label>
     <select id="customer_select" name="customer_id" class="px-3 py-2 rounded border w-full" required>
-  <option value="" disabled selected>Velg kunde…</option>
-  {% if customers is defined %}
-    {% for c in customers %}
-      <option value="{{ c.id }}">{{ c.name }}{% if c.email %} – {{ c.email }}{% endif %}</option>
-    {% endfor %}
-  {% endif %}
-</select>
+      <option value="" disabled selected>Velg kunde…</option>
+      {% if customers is defined %}
+        {% for c in customers %}
+          <option value="{{ c.id }}">{{ c.name }}{% if c.email %} – {{ c.email }}{% endif %}</option>
+        {% endfor %}
+      {% endif %}
+    </select>
   </div>
 
-<script>
-(async () => {
-  const sel = document.getElementById('customer_select');
-  if (!sel) return;
-
-  // Hvis templaten IKKE fikk kunder i context, henter vi dem via API:
-  const hasServerOptions = sel.querySelectorAll('option').length > 1;
-  if (hasServerOptions) return; // allerede fylt av server
-
-  try {
-    const res = await fetch('/api/customers', { credentials: 'same-origin' });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json(); // [{id,name,email}, ...]
-
-    // Tøm bort “Velg kunde…” og legg den inn igjen på topp:
-    const first = sel.querySelector('option');
-    sel.innerHTML = '';
-    sel.appendChild(first);
-
-    for (const c of data) {
-      const opt = document.createElement('option');
-      opt.value = c.id;
-      opt.textContent = c.email ? `${c.name} – ${c.email}` : c.name;
-      sel.appendChild(opt);
-    }
-  } catch (err) {
-    console.error('Kunne ikke hente kunder:', err);
-  }
-})();
-</script>
+  <div>
+    <label class="block text-sm text-gray-600">Kundeordre</label>
+    <div class="flex gap-2">
+      <select id="co_select" name="co_id" class="px-3 py-2 rounded border w-full min-w-40">
+        <option value="">Ny åpen ordre (auto)</option>
+      </select>
+      <button type="button" id="new_co_btn" class="px-3 py-2 rounded border">+ Ny</button>
+    </div>
+  </div>
 
   <div>
     <label class="block text-sm text-gray-600">Antall</label>
-    <input type="number" min="1" name="qty" value="1" class="px-3 py-2 rounded border" />
+    <input type="number" min="1" name="qty" value="1" class="px-3 py-2 rounded border w-full" />
   </div>
 
-  <div class="flex-1">
+  <div class="md:col-span-1 md:col-start-4">
     <label class="block text-sm text-gray-600">Notat</label>
-    <input type="text" name="note" value="Reservasjon" class="px-3 py-2 rounded border w-full" />
+    <input type="text" name="note" value="Reservert" class="px-3 py-2 rounded border w-full" />
   </div>
 
-  <button class="px-3 py-2 rounded bg-zinc-900 text-white">Reserver</button>
+  <div class="md:col-span-4">
+    <button class="px-3 py-2 rounded bg-zinc-900 text-white">Reserver</button>
+  </div>
 </form>
 
+<!-- Mottak (opprett enheter) -->
 <div class="rounded-2xl border p-4 bg-white mb-4">
   <h2 class="font-semibold mb-2">Mottak (opprett enheter)</h2>
   <form method="post" action="/item/{{ item.id }}/units/receive" class="flex gap-2 items-end">
@@ -101,6 +69,7 @@
   </form>
 </div>
 
+<!-- Enhetsliste + batch-handlinger (CO-reservasjon, opphev, uttak) -->
 <div class="rounded-2xl border bg-white overflow-hidden">
   <div class="p-3 flex items-center justify-between">
     <div class="text-sm text-zinc-600">Enheter</div>
@@ -124,6 +93,7 @@
       </form>
     </div>
   </div>
+
   <table class="w-full text-sm">
     <thead class="bg-zinc-100">
       <tr class="text-left">
@@ -142,13 +112,13 @@
         <td class="p-2"><input type="checkbox" class="rowcb" value="{{ u.id }}" {% if u.status == 'used' %}disabled{% endif %}></td>
         <td class="p-2">{{ u.id }}</td>
         <td class="p-2">
-          {% if u.status == 'available' %}<span class="text-emerald-700 font-medium">ledig</span>
-          {% elif u.status == 'reserved' %}<span class="text-amber-700 font-medium">reservert</span>
+          {% if u.status in ('available','ledig') %}<span class="text-emerald-700 font-medium">ledig</span>
+          {% elif u.status in ('reserved','reservert') %}<span class="text-amber-700 font-medium">reservert</span>
           {% else %}<span class="text-rose-700 font-medium">brukt</span>{% endif %}
         </td>
         <td class="p-2">{% if u.po %}{{ u.po.code }}{% endif %}</td>
         <td class="p-2">{% if u.reserved_co %}{{ u.reserved_co.code }}{% endif %}</td>
-        <td class="p-2 whitespace-nowrap">{{ u.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+        <td class="p-2 whitespace-nowrap">{{ u.created_at.strftime('%Y-%m-%d %H:%M') if u.created_at }}</td>
         <td class="p-2 whitespace-nowrap">{% if u.used_at %}{{ u.used_at.strftime('%Y-%m-%d %H:%M') }}{% endif %}</td>
       </tr>
       {% endfor %}
@@ -160,6 +130,26 @@
 </div>
 
 <script>
+  // Fyll kundelista via API hvis server ikke sendte customers
+  (async () => {
+    const sel = document.getElementById('customer_select');
+    if (!sel) return;
+    const hasServerOptions = sel.querySelectorAll('option').length > 1;
+    if (hasServerOptions) return;
+    try {
+      const res = await fetch('/api/customers', { credentials: 'same-origin' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const first = sel.querySelector('option'); sel.innerHTML = ''; sel.appendChild(first);
+      for (const c of data) {
+        const opt = document.createElement('option');
+        opt.value = c.id; opt.textContent = c.email ? `${c.name} – ${c.email}` : c.name;
+        sel.appendChild(opt);
+      }
+    } catch (err) { console.error('Kunne ikke hente kunder:', err); }
+  })();
+
+  // Batch-skjema wiring
   const allToggle = document.getElementById('allToggle');
   const cbs = Array.from(document.querySelectorAll('.rowcb'));
   function selectedIds() { return cbs.filter(cb => cb.checked).map(cb => cb.value).join(','); }
@@ -177,6 +167,69 @@
   wire('reserveForm','reserve_ids');
   wire('unreserveForm','unreserve_ids');
   wire('issueForm','issue_ids');
+</script>
+
+<script>
+  // 1) Fyll kundelista via API hvis server ikke sendte customers
+  (async () => {
+    const sel = document.getElementById('customer_select');
+    if (!sel) return;
+    const hasServerOptions = sel.querySelectorAll('option').length > 1;
+    if (!hasServerOptions) {
+      try {
+        const res = await fetch('/api/customers', { credentials: 'same-origin' });
+        if (res.ok) {
+          const data = await res.json();
+          const first = sel.querySelector('option'); sel.innerHTML = ''; sel.appendChild(first);
+          for (const c of data) {
+            const opt = document.createElement('option');
+            opt.value = c.id; opt.textContent = c.email ? `${c.name} – ${c.email}` : c.name;
+            sel.appendChild(opt);
+          }
+        }
+      } catch {}
+    }
+
+    // 2) Når kunde velges: hent åpne CO-er
+    const coSel = document.getElementById('co_select');
+    async function loadCOsForCustomer() {
+      const cid = sel.value;
+      if (!cid) return;
+      coSel.innerHTML = '<option value="">Ny åpen ordre (auto)</option>';
+      try {
+        const res = await fetch(`/api/customers/${cid}/open_cos`, { credentials: 'same-origin' });
+        if (!res.ok) return;
+        const cos = await res.json(); // [{id, code}]
+        for (const co of cos) {
+          const opt = document.createElement('option');
+          opt.value = co.id; opt.textContent = co.code;
+          coSel.appendChild(opt);
+        }
+      } catch {}
+    }
+    sel.addEventListener('change', loadCOsForCustomer);
+
+    // 3) Ny CO-knapp
+    const newBtn = document.getElementById('new_co_btn');
+    newBtn.addEventListener('click', async () => {
+      const cid = sel.value;
+      if (!cid) { alert('Velg kunde først.'); return; }
+      try {
+        const res = await fetch(`/api/customers/${cid}/co/new`, { method: 'POST', credentials: 'same-origin' });
+        if (!res.ok) { alert('Kunne ikke opprette ny ordre.'); return; }
+        const co = await res.json();
+        const opt = document.createElement('option');
+        opt.value = co.id; opt.textContent = co.code;
+        coSel.appendChild(opt);
+        coSel.value = co.id; // velg den nyopprettede
+      } catch {
+        alert('Kunne ikke opprette ny ordre.');
+      }
+    });
+
+    // auto-load ved første last hvis kunde er forhåndsvalgt
+    if (sel.value) { loadCOsForCustomer(); }
+  })();
 </script>
 
 {% endblock %}

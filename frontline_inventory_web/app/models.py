@@ -89,15 +89,16 @@ class PurchaseOrderLine(Base):
 
 class CustomerOrder(Base):
     __tablename__ = "customer_orders"
+    id = Column(Integer, primary_key=True)
+    code = Column(String(120), unique=True, nullable=False)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
+    status = Column(String(20), default="open")
+    notes = Column(String(500), default="")
+    created_at = Column(DateTime)
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    code: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
-    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"))
-    status: Mapped[str] = mapped_column(String(20), default="open")  # open|fulfilled|cancelled
-    notes: Mapped[str] = mapped_column(String(500), default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-
-    customer: Mapped[customer] = relationship("Customer")
+    customer = relationship("Customer")
+    # NYTT: backref til ordrelinjer
+    lines = relationship("CustomerOrderLine", back_populates="co", cascade="all, delete-orphan")
 
 class ItemUnit(Base):
     __tablename__ = "item_units"
@@ -127,11 +128,13 @@ class Customer(Base):
 
 class CustomerOrderLine(Base):
     __tablename__ = "customer_order_lines"
+    id = Column(Integer, primary_key=True)
+    co_id = Column(Integer, ForeignKey("customer_orders.id"), nullable=False)
+    item_id = Column(Integer, ForeignKey("items.id"), nullable=True)
+    # Dette manglet hos deg:
+    qty = Column(Integer, default=1)
+    notes = Column(String(500), default="")
+    created_at = Column(DateTime)
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    co_id: Mapped[int] = mapped_column(ForeignKey("customer_orders.id", ondelete="CASCADE"))
-    item_id: Mapped[Optional[int]] = mapped_column(ForeignKey("items.id", ondelete="SET NULL"), nullable=True)
-
-    qty_ordered: Mapped[int] = mapped_column(Integer, default=0)
-    qty_reserved: Mapped[int] = mapped_column(Integer, default=0)
-    qty_fulfilled: Mapped[int] = mapped_column(Integer, default=0)
+    co = relationship("CustomerOrder", back_populates="lines")
+    item = relationship("Item")

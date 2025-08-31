@@ -295,25 +295,40 @@ def ensure_migrations():
             conn.commit()
             cur.execute("PRAGMA foreign_keys=ON")
 
-    # ------------------------------------------------------------
-    # customer_order_lines (opprett hvis mangler)
-    # ------------------------------------------------------------
-    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='customer_order_lines'")
-    if not cur.fetchone():
+# ------------------------------------------------------------
+# customer_order_lines
+# ------------------------------------------------------------
+    cur.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='customer_order_lines'")
+    exists = cur.fetchone() is not None
+
+    if not exists:
+    # Ny tabell med kolonnene vi faktisk bruker (uten unit_id)
         cur.execute("""
-            CREATE TABLE customer_order_lines (
-                id INTEGER PRIMARY KEY,
-                co_id INTEGER NOT NULL,
-                item_id INTEGER NULL,
-                unit_id INTEGER NULL,
-                qty INTEGER DEFAULT 1,
-                notes VARCHAR(500) DEFAULT '',
-                created_at DATETIME,
-                FOREIGN KEY(co_id) REFERENCES customer_orders(id) ON DELETE CASCADE,
-                FOREIGN KEY(item_id) REFERENCES items(id) ON DELETE SET NULL,
-                FOREIGN KEY(unit_id) REFERENCES item_units(id) ON DELETE SET NULL
-            )
-        """)
+        CREATE TABLE customer_order_lines (
+            id INTEGER PRIMARY KEY,
+            co_id INTEGER NOT NULL,
+            item_id INTEGER NULL,
+            qty INTEGER DEFAULT 1,
+            notes VARCHAR(500) DEFAULT '',
+            created_at DATETIME,
+            FOREIGN KEY(co_id) REFERENCES customer_orders(id) ON DELETE CASCADE,
+            FOREIGN KEY(item_id) REFERENCES items(id) ON DELETE SET NULL
+        )
+    """)
+    else:
+    # Legg til manglende kolonner på eksisterende tabell
+        cur.execute("PRAGMA table_info(customer_order_lines)")
+    cols = [r[1] for r in cur.fetchall()]
+    if "qty" not in cols:
+        cur.execute("ALTER TABLE customer_order_lines ADD COLUMN qty INTEGER DEFAULT 1")
+    if "notes" not in cols:
+        cur.execute("ALTER TABLE customer_order_lines ADD COLUMN notes VARCHAR(500) DEFAULT ''")
+    if "created_at" not in cols:
+        cur.execute("ALTER TABLE customer_order_lines ADD COLUMN created_at DATETIME")
+
+# Indekser som er kjekke å ha
+    cur.execute("CREATE INDEX IF NOT EXISTS ix_col_co ON customer_order_lines(co_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS ix_col_item ON customer_order_lines(item_id)")
 
     conn.commit()
     conn.close()
