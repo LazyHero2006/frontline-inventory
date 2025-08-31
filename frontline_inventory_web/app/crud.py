@@ -62,6 +62,7 @@ def reserve_qty_for_customer(
     customer_id: int,
     note: str,
     actor,
+    co_id: int | None = None,   # <--- NYTT: spesifikk CO kan sendes inn
 ):
     if qty <= 0:
         raise HTTPException(400, "Antall må være > 0")
@@ -70,10 +71,27 @@ def reserve_qty_for_customer(
     if not item:
         raise HTTPException(404, "Fant ikke varen")
 
-    # Finn/lag åpen CO for kunden
-    co = get_or_create_open_co_for_customer(db, customer_id)
+    cust = db.get(Customer, customer_id)
+    if not cust:
+        raise HTTPException(404, "Fant ikke kunden")
 
-    # Ledige enheter: støtt både norsk/engelsk status
+    # Finn/valider CO
+    if co_id:
+        co = db.get(CustomerOrder, co_id)
+        if not co:
+            raise HTTPException(404, "Fant ikke kundeordre")
+        if co.customer_id and co.customer_id != customer_id:
+            raise HTTPException(400, "Valgt ordre tilhører en annen kunde")
+        if co.status and co.status != "open":
+            raise HTTPException(400, f"Ordre {co.code} er ikke åpen")
+        # sikr at co har customer_id
+        if not co.customer_id:
+            co.customer_id = customer_id
+    else:
+        # bruk/lag åpen CO for kunden
+        co = get_or_create_open_co_for_customer(db, customer_id)
+
+    # Ledige enheter (både norsk/engelsk status)
     units = db.execute(
         select(ItemUnit)
         .where(ItemUnit.item_id == item_id)
@@ -84,9 +102,9 @@ def reserve_qty_for_customer(
 
     take = min(qty, len(units))
     if take == 0:
-        # ingen enheter – meld fra, men ikke crash
-        raise HTTPException(400, f"Ingen ledige enheter å reservere.")
+        raise HTTPException(400, "Ingen ledige enheter å reservere.")
 
+    # Marker enheter + logg transaksjoner
     reserved_now = 0
     for u in units[:take]:
         u.status = "reservert"
@@ -105,6 +123,29 @@ def reserve_qty_for_customer(
         )
         db.add(tx)
         reserved_now += 1
+
+    # Oppdater/legg til ordrelinje (summerer antall)
+    line = db.execute(
+        select(CustomerOrderLine)
+        .where(CustomerOrderLine.co_id == co.id)
+        .where(CustomerOrderLine.item_id == item.id)
+    ).scalar_one_or_none()
+
+    if line:
+        line.qty = (line.qty or 0) + reserved_now
+        if note:
+            line.notes = (line.notes or "")
+            if note and note not in line.notes:
+                line.notes = (line.notes + f" | {note}").strip(" |")
+    else:
+        db.add(CustomerOrderLine(
+            co_id=co.id,
+            item_id=item.id,
+            unit_id=None,
+            qty=reserved_now,
+            notes=note or "",
+            created_at=datetime.utcnow(),
+        ))
 
     db.commit()
     return co, reserved_now

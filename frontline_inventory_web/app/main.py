@@ -401,12 +401,13 @@ async def item_reserve_customer(
     customer_id: int = Form(...),
     qty: int = Form(1),
     note: str = Form("Reservert"),
+    co_id: int | None = Form(None),   # <--- NYTT
     db: Session = Depends(get_db),
     current_user = Depends(require_user),
 ):
     try:
         co, taken = crud.reserve_qty_for_customer(
-            db, item_id=item_id, qty=qty, customer_id=customer_id, note=note, actor=current_user
+            db, item_id=item_id, qty=qty, customer_id=customer_id, note=note, actor=current_user, co_id=co_id
         )
         if taken < qty:
             request.session["flash_success"] = f"Reserverte {taken} av {qty} stk til {co.code} (resten manglet på lager)."
@@ -416,6 +417,32 @@ async def item_reserve_customer(
         request.session["flash_error"] = e.detail if hasattr(e, "detail") else str(e)
 
     return RedirectResponse(url=f"/item/{item_id}", status_code=303)
+
+# Åpne ordrer for en kunde (til dropdownen)
+@app.get("/api/customers/{customer_id}/open_cos")
+def api_open_cos(customer_id: int, db: Session = Depends(get_db), current_user = Depends(require_user)):
+    from sqlalchemy import select
+    from .models import CustomerOrder
+    rows = db.execute(
+        select(CustomerOrder)
+        .where(CustomerOrder.customer_id == customer_id)
+        .where(CustomerOrder.status == "open")
+        .order_by(CustomerOrder.id.desc())
+    ).scalars().all()
+    return [{"id": co.id, "code": co.code} for co in rows]
+
+# Opprett ny CO på kunden (for “Ny ordre”-knapp)
+@app.post("/api/customers/{customer_id}/co/new")
+def api_new_co(customer_id: int, db: Session = Depends(get_db), current_user = Depends(require_user)):
+    from .models import CustomerOrder
+    from datetime import datetime
+    # generer enkel kode (du kan ha mer avansert sekvens senere)
+    n = db.query(CustomerOrder).count() + 1
+    code = f"CO-{datetime.utcnow().year}-{n:03d}"
+    co = CustomerOrder(code=code, customer_id=customer_id, status="open", notes="", created_at=datetime.utcnow())
+    db.add(co)
+    db.commit()
+    return {"id": co.id, "code": co.code}
 
 @app.post("/item/{item_id}/units/reserve")
 async def item_units_reserve(

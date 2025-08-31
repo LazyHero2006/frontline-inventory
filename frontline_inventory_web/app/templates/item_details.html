@@ -11,9 +11,8 @@
   <div class="rounded-2xl border p-4 bg-white"><div class="text-sm text-zinc-600">Brukt</div><div class="text-2xl font-bold">{{ count_used }}</div></div>
 </div>
 
-<!-- Reserver til KUNDE (lager CO automatisk) -->
-<form method="post" action="/item/{{ item.id }}/reserve_customer" class="flex gap-3 items-end mb-3">
-  <div class="flex-1">
+<form method="post" action="/item/{{ item.id }}/reserve_customer" class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end mb-3">
+  <div>
     <label class="block text-sm text-gray-600">Kunde</label>
     <select id="customer_select" name="customer_id" class="px-3 py-2 rounded border w-full" required>
       <option value="" disabled selected>Velg kunde…</option>
@@ -24,15 +23,30 @@
       {% endif %}
     </select>
   </div>
+
+  <div>
+    <label class="block text-sm text-gray-600">Kundeordre</label>
+    <div class="flex gap-2">
+      <select id="co_select" name="co_id" class="px-3 py-2 rounded border w-full min-w-40">
+        <option value="">Ny åpen ordre (auto)</option>
+      </select>
+      <button type="button" id="new_co_btn" class="px-3 py-2 rounded border">+ Ny</button>
+    </div>
+  </div>
+
   <div>
     <label class="block text-sm text-gray-600">Antall</label>
-    <input type="number" min="1" name="qty" value="1" class="px-3 py-2 rounded border" />
+    <input type="number" min="1" name="qty" value="1" class="px-3 py-2 rounded border w-full" />
   </div>
-  <div class="flex-1">
+
+  <div class="md:col-span-1 md:col-start-4">
     <label class="block text-sm text-gray-600">Notat</label>
     <input type="text" name="note" value="Reservert" class="px-3 py-2 rounded border w-full" />
   </div>
-  <button class="px-3 py-2 rounded bg-zinc-900 text-white">Reserver</button>
+
+  <div class="md:col-span-4">
+    <button class="px-3 py-2 rounded bg-zinc-900 text-white">Reserver</button>
+  </div>
 </form>
 
 <!-- Mottak (opprett enheter) -->
@@ -153,6 +167,69 @@
   wire('reserveForm','reserve_ids');
   wire('unreserveForm','unreserve_ids');
   wire('issueForm','issue_ids');
+</script>
+
+<script>
+  // 1) Fyll kundelista via API hvis server ikke sendte customers
+  (async () => {
+    const sel = document.getElementById('customer_select');
+    if (!sel) return;
+    const hasServerOptions = sel.querySelectorAll('option').length > 1;
+    if (!hasServerOptions) {
+      try {
+        const res = await fetch('/api/customers', { credentials: 'same-origin' });
+        if (res.ok) {
+          const data = await res.json();
+          const first = sel.querySelector('option'); sel.innerHTML = ''; sel.appendChild(first);
+          for (const c of data) {
+            const opt = document.createElement('option');
+            opt.value = c.id; opt.textContent = c.email ? `${c.name} – ${c.email}` : c.name;
+            sel.appendChild(opt);
+          }
+        }
+      } catch {}
+    }
+
+    // 2) Når kunde velges: hent åpne CO-er
+    const coSel = document.getElementById('co_select');
+    async function loadCOsForCustomer() {
+      const cid = sel.value;
+      if (!cid) return;
+      coSel.innerHTML = '<option value="">Ny åpen ordre (auto)</option>';
+      try {
+        const res = await fetch(`/api/customers/${cid}/open_cos`, { credentials: 'same-origin' });
+        if (!res.ok) return;
+        const cos = await res.json(); // [{id, code}]
+        for (const co of cos) {
+          const opt = document.createElement('option');
+          opt.value = co.id; opt.textContent = co.code;
+          coSel.appendChild(opt);
+        }
+      } catch {}
+    }
+    sel.addEventListener('change', loadCOsForCustomer);
+
+    // 3) Ny CO-knapp
+    const newBtn = document.getElementById('new_co_btn');
+    newBtn.addEventListener('click', async () => {
+      const cid = sel.value;
+      if (!cid) { alert('Velg kunde først.'); return; }
+      try {
+        const res = await fetch(`/api/customers/${cid}/co/new`, { method: 'POST', credentials: 'same-origin' });
+        if (!res.ok) { alert('Kunne ikke opprette ny ordre.'); return; }
+        const co = await res.json();
+        const opt = document.createElement('option');
+        opt.value = co.id; opt.textContent = co.code;
+        coSel.appendChild(opt);
+        coSel.value = co.id; // velg den nyopprettede
+      } catch {
+        alert('Kunne ikke opprette ny ordre.');
+      }
+    });
+
+    // auto-load ved første last hvis kunde er forhåndsvalgt
+    if (sel.value) { loadCOsForCustomer(); }
+  })();
 </script>
 
 {% endblock %}
