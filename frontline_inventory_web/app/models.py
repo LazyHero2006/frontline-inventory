@@ -97,7 +97,6 @@ class CustomerOrder(Base):
     created_at = Column(DateTime)
 
     customer = relationship("Customer")
-    # NYTT: backref til ordrelinjer
     lines = relationship("CustomerOrderLine", back_populates="co", cascade="all, delete-orphan")
 
 class ItemUnit(Base):
@@ -131,10 +130,16 @@ class CustomerOrderLine(Base):
     id = Column(Integer, primary_key=True)
     co_id = Column(Integer, ForeignKey("customer_orders.id"), nullable=False)
     item_id = Column(Integer, ForeignKey("items.id"), nullable=True)
-    # Dette manglet hos deg:
-    qty = Column(Integer, default=1)
+
+    # Kode bruker .qty, DB-kolonnen heter qty_ordered
+    qty = Column("qty_ordered", Integer, nullable=False, default=1)
+
+    # Disse to eksisterer i DB-en din som NOT NULL i din logg
+    qty_reserved = Column(Integer, nullable=False, default=0)
+    qty_fulfilled = Column(Integer, nullable=False, default=0)
+
     notes = Column(String(500), default="")
     created_at = Column(DateTime)
 
-    co = relationship("CustomerOrder", back_populates="lines")
-    item = relationship("Item")
+    co = relationship("CustomerOrder", back_populates="lines", lazy="joined")
+    item = relationship("Item", lazy="joined")

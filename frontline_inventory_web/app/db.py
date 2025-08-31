@@ -302,13 +302,15 @@ def ensure_migrations():
     exists = cur.fetchone() is not None
 
     if not exists:
-    # Ny tabell med kolonnene vi faktisk bruker (uten unit_id)
+    # Lag tabell med begge kolonnene
         cur.execute("""
         CREATE TABLE customer_order_lines (
             id INTEGER PRIMARY KEY,
             co_id INTEGER NOT NULL,
             item_id INTEGER NULL,
-            qty INTEGER DEFAULT 1,
+            qty_ordered INTEGER NOT NULL DEFAULT 1,
+            qty_reserved INTEGER NOT NULL DEFAULT 0,
+            qty_fulfilled INTEGER NOT NULL DEFAULT 0,
             notes VARCHAR(500) DEFAULT '',
             created_at DATETIME,
             FOREIGN KEY(co_id) REFERENCES customer_orders(id) ON DELETE CASCADE,
@@ -316,17 +318,31 @@ def ensure_migrations():
         )
     """)
     else:
-    # Legg til manglende kolonner på eksisterende tabell
         cur.execute("PRAGMA table_info(customer_order_lines)")
     cols = [r[1] for r in cur.fetchall()]
-    if "qty" not in cols:
-        cur.execute("ALTER TABLE customer_order_lines ADD COLUMN qty INTEGER DEFAULT 1")
+
+    # hvis eldre db har 'qty' men ikke 'qty_ordered'
+    if "qty_ordered" not in cols:
+        cur.execute("ALTER TABLE customer_order_lines ADD COLUMN qty_ordered INTEGER")
+        if "qty" in cols:
+            cur.execute("UPDATE customer_order_lines SET qty_ordered = COALESCE(qty, 1)")
+        else:
+            cur.execute("UPDATE customer_order_lines SET qty_ordered = 1")
+        cur.execute("UPDATE customer_order_lines SET qty_ordered = 1 WHERE qty_ordered IS NULL")
+
+    if "qty_reserved" not in cols:
+        cur.execute("ALTER TABLE customer_order_lines ADD COLUMN qty_reserved INTEGER")
+        cur.execute("UPDATE customer_order_lines SET qty_reserved = 0 WHERE qty_reserved IS NULL")
+
     if "notes" not in cols:
         cur.execute("ALTER TABLE customer_order_lines ADD COLUMN notes VARCHAR(500) DEFAULT ''")
     if "created_at" not in cols:
         cur.execute("ALTER TABLE customer_order_lines ADD COLUMN created_at DATETIME")
+    if "qty_fulfilled" not in cols:
+        cur.execute("ALTER TABLE customer_order_lines ADD COLUMN qty_fulfilled INTEGER")
+        cur.execute("UPDATE customer_order_lines SET qty_fulfilled = 0 WHERE qty_fulfilled IS NULL")
 
-# Indekser som er kjekke å ha
+# Indekser
     cur.execute("CREATE INDEX IF NOT EXISTS ix_col_co ON customer_order_lines(co_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS ix_col_item ON customer_order_lines(item_id)")
 

@@ -131,7 +131,9 @@ def reserve_qty_for_customer(
     ).scalar_one_or_none()
 
     if line:
-        line.qty = (line.qty or 0) + reserved_now
+        line.qty = (line.qty or 0) + reserved_now               # qty_ordered
+        line.qty_reserved = (line.qty_reserved or 0) + reserved_now
+        # line.qty_fulfilled lar vi være som er (0 til varer plukkes/leveres)
         if note:
             existing = (line.notes or "")
             if note not in existing:
@@ -140,7 +142,9 @@ def reserve_qty_for_customer(
         db.add(CustomerOrderLine(
             co_id=co.id,
             item_id=item.id,
-            qty=reserved_now,
+            qty=reserved_now,            # maps til qty_ordered
+            qty_reserved=reserved_now,   # viktig nå som NOT NULL
+            # qty_fulfilled = 0  # trenger ikke settes; default i ORM/DB
             notes=note or "",
             created_at=datetime.utcnow(),
         ))
