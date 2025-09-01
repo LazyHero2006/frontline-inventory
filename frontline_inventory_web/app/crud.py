@@ -131,7 +131,7 @@ def reserve_qty_for_customer(
     ).scalar_one_or_none()
 
     if line:
-        line.qty = (line.qty or 0) + reserved_now               # qty_ordered
+        line.qty = (line.qty or 0) + 0               # don't increase ordered on reservation
         line.qty_reserved = (line.qty_reserved or 0) + reserved_now
         # line.qty_fulfilled lar vi være som er (0 til varer plukkes/leveres)
         if note:
@@ -142,7 +142,7 @@ def reserve_qty_for_customer(
         db.add(CustomerOrderLine(
             co_id=co.id,
             item_id=item.id,
-            qty=reserved_now,            # maps til qty_ordered
+            qty=0,            # don't set ordered via reservation
             qty_reserved=reserved_now,   # viktig nå som NOT NULL
             # qty_fulfilled = 0  # trenger ikke settes; default i ORM/DB
             notes=note or "",
@@ -169,9 +169,33 @@ def ensure_line(db: Session, co: CustomerOrder, item: Item) -> CustomerOrderLine
         select(CustomerOrderLine).where(CustomerOrderLine.co_id == co.id, CustomerOrderLine.item_id == item.id)
     ).scalar_one_or_none()
     if not line:
-        line = CustomerOrderLine(co_id=co.id, item_id=item.id, qty_ordered=0, qty_reserved=0, qty_fulfilled=0)
+        # Bruk ORM-feltet 'qty' (mapper til kolonnen 'qty_ordered')
+        line = CustomerOrderLine(co_id=co.id, item_id=item.id, qty=0, qty_reserved=0, qty_fulfilled=0)
         db.add(line); db.commit(); db.refresh(line)
     return line
+
+def reduce_ordered_on_co_line(db: Session, co: CustomerOrder, item: Item, qty: int, note: str = "") -> int:
+    """Reduce the 'bestilt' (qty on order) on the CO line for an item.
+    Clamps at zero. Returns how much was actually reduced.
+    """
+    qty = max(0, int(qty))
+    if qty == 0:
+        return 0
+    line = ensure_line(db, co, item)
+    before = int(line.qty or 0)
+    take = min(before, qty)
+    if take > 0:
+        line.qty = max(0, before - take)
+        # Optional audit row so it's visible in history
+        db.add(Tx(
+            item_id=item.id,
+            sku=item.sku,
+            name=item.name,
+            delta=0,
+            note=(note or "Redusert bestilt") + f" {take} stk (CO {co.code})",
+        ))
+        db.commit()
+    return take
 
 def reserve_units(db: Session, item: Item, co: CustomerOrder, qty: int, note: str = "", actor: User | None = None):
     qty = max(0, int(qty))
@@ -460,12 +484,29 @@ def delete_item(db: Session, item: Item, actor: Optional[User] = None, confirm_c
 
 
 
-def adjust_stock(db: Session, item: Item, delta: int, note: str = "", actor: Optional[User] = None) -> Tx:
+def adjust_stock(
+    db: Session,
+    item: Item,
+    delta: int,
+    note: str = "",
+    actor: Optional[User] = None,
+    co: Optional[CustomerOrder] = None,
+    po: Optional[PurchaseOrder] = None,
+    unit: Optional[ItemUnit] = None,
+) -> Tx:
     item.qty = max(0, (item.qty or 0) + int(delta))
     item.last_updated = datetime.utcnow()
     tx = Tx(
-        item_id=item.id, sku=item.sku, name=item.name, delta=int(delta), note=note,
-        user_id=(actor.id if actor else None), user_name=(actor.name if actor else None),
+        item_id=item.id,
+        sku=item.sku,
+        name=item.name,
+        delta=int(delta),
+        note=note,
+        user_id=(actor.id if actor else None),
+        user_name=(actor.name if actor else None),
+        co_id=(co.id if co else None),
+        po_id=(po.id if po else None),
+        unit_id=(unit.id if unit else None),
     )
     db.add_all([item, tx])
     db.commit()
@@ -627,7 +668,7 @@ def create_units_for_receive(
     db.refresh(tx)
     return tx
 
-def reserve_units(db: Session, unit_ids: Iterable[int], co_code: str, note: str, actor: Optional[User]) -> int:
+def reserve_units_by_ids(db: Session, unit_ids: Iterable[int], co_code: str, note: str, actor: Optional[User]) -> int:
     co = get_or_create_co(db, co_code)
     ids = list(map(int, unit_ids))
     rows = db.execute(select(ItemUnit).where(ItemUnit.id.in_(ids))).scalars().all()
@@ -642,7 +683,8 @@ def reserve_units(db: Session, unit_ids: Iterable[int], co_code: str, note: str,
         item = db.get(Item, item_id)
         k = len(units)
         line = ensure_line(db, co, item)
-        line.qty = (line.qty or 0) + k
+        # Ikke øk 'bestilt' ved reservasjon av konkrete enheter
+        line.qty = (line.qty or 0) + 0
         line.qty_reserved = (line.qty_reserved or 0) + k
         db.add(Tx(
             item_id=item_id, sku=item.sku, name=item.name, delta=0,

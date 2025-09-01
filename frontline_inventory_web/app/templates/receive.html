@@ -21,11 +21,28 @@
       </div>
       <div>
         <label class="block text-sm text-zinc-600" for="po_code">Bestillingsordre (PO-kode)</label>
-        <input id="po_code" name="po_code" class="px-3 py-2 rounded border w-full" placeholder="PO-2025-001">
+        <input id="po_code" name="po_code" class="px-3 py-2 rounded border w-full" placeholder="PO-2025-001" list="po_codes">
+        {% if po_codes %}
+          <datalist id="po_codes">
+            {% for code in po_codes %}<option value="{{ code }}"></option>{% endfor %}
+          </datalist>
+        {% endif %}
       </div>
       <div>
         <label class="block text-sm text-zinc-600" for="note">Notat</label>
         <input id="note" name="note" class="px-3 py-2 rounded border w-full" value="Mottak">
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-sm text-zinc-600" for="co_code">Kundeordre (CO-kode)</label>
+          <input id="co_code" name="co_code" class="px-3 py-2 rounded border w-full" placeholder="CO-2025-001">
+        </div>
+        <div class="flex items-end">
+          <label class="inline-flex items-center gap-2 text-sm text-zinc-700">
+            <input type="checkbox" name="auto_reserve" value="1" class="rounded border" checked>
+            Reserver til denne CO etter mottak
+          </label>
+        </div>
       </div>
 
       <div class="flex justify-end gap-2">

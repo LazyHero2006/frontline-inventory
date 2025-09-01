@@ -114,13 +114,24 @@ def dashboard(request: Request, q: str = "", category: str = "Alle", location: s
 
     items = db.execute(stmt).scalars().all()
 
+    # Tilgjengelige enheter per vare (status 'available'/'ledig')
+    avail_rows = db.execute(
+        select(ItemUnit.item_id, func.count(ItemUnit.id))
+        .where(ItemUnit.status.in_(("available", "ledig")))
+        .where(ItemUnit.item_id.is_not(None))
+        .group_by(ItemUnit.item_id)
+    ).all()
+    # Ignorer rader der item_id er None (kan forekomme etter sletting)
+    avail_counts = {int(item_id): int(cnt or 0) for item_id, cnt in avail_rows if item_id is not None}
+
     # paginering
     total = len(items)
     start = (page - 1) * per_page
     end = start + per_page
     page_items = items[start:end]
 
-    low_count = sum(1 for i in items if (i.qty or 0) <= (i.min_qty or 0))
+    # Lav beholdning: ingen ledige enheter igjen
+    low_count = sum(1 for i in items if (avail_counts.get(i.id, 0) <= 0))
     total_items, total_value = crud.inventory_stats(db)
 
     return templates.TemplateResponse("index.html", {
@@ -139,8 +150,203 @@ def dashboard(request: Request, q: str = "", category: str = "Alle", location: s
         "low_count": low_count,
         "total_items": total_items,
         "total_value": total_value,
-        "fmt_currency": fmt_currency
+        "fmt_currency": fmt_currency,
+        "avail_counts": avail_counts,
     })
+
+@app.get("/orders", response_class=HTMLResponse)
+def orders_overview(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_user)
+):
+    # Hent alle åpne kundeordre som har noe bestilt
+    cos = db.execute(select(CustomerOrder).where(CustomerOrder.status == "open").order_by(CustomerOrder.created_at.desc())).scalars().all()
+
+    orders = []
+    total_needed_all = 0
+    for co in cos:
+        lines = db.execute(select(CustomerOrderLine).where(CustomerOrderLine.co_id == co.id)).scalars().all()
+        co_lines = []
+        total_needed = 0
+        for l in lines:
+            ordered = int(l.qty or 0)
+            reserved = int(l.qty_reserved or 0)
+            fulfilled = int(l.qty_fulfilled or 0)
+            need = max(ordered - reserved - fulfilled, 0)
+            if need > 0:
+                co_lines.append({
+                    "line": l,
+                    "item": l.item,
+                    "need": need,
+                    "ordered": ordered,
+                    "reserved": reserved,
+                    "fulfilled": fulfilled,
+                })
+                total_needed += need
+        if co_lines:
+            orders.append({
+                "co": co,
+                "lines": co_lines,
+                "total_needed": total_needed,
+            })
+            total_needed_all += total_needed
+
+    # Leverandørordre (PO) oversikt
+    from .models import PurchaseOrder, PurchaseOrderLine
+    pos = []
+    po_rows = db.execute(select(PurchaseOrder).order_by(PurchaseOrder.created_at.desc())).scalars().all()
+    for po in po_rows:
+        pols = db.execute(select(PurchaseOrderLine).where(PurchaseOrderLine.po_id == po.id)).scalars().all()
+        po_lines = []
+        total_remaining = 0
+        for pol in pols:
+            ordered = int(pol.qty_ordered or 0)
+            received = int(pol.qty_received or 0)
+            remaining = max(ordered - received, 0)
+            po_lines.append({
+                "line": pol,
+                "item": pol.item,
+                "ordered": ordered,
+                "received": received,
+                "remaining": remaining,
+            })
+            total_remaining += remaining
+        pos.append({
+            "po": po,
+            "lines": po_lines,
+            "total_remaining": total_remaining,
+        })
+
+    # PO-koder for mottak-datalist i denne visningen
+    from .models import PurchaseOrder
+    po_rows = db.execute(select(PurchaseOrder).order_by(PurchaseOrder.created_at.desc())).scalars().all()
+    po_codes = [po.code for po in po_rows]
+
+    return templates.TemplateResponse(
+        "orders.html",
+        {
+            "request": request,
+            "user": current_user,
+            "orders": orders,
+            "total_needed_all": total_needed_all,
+            "po_codes": po_codes,
+        },
+    )
+
+@app.get("/po", response_class=HTMLResponse)
+def po_page(request: Request, db: Session = Depends(get_db), current_user=Depends(require_user)):
+    from .models import PurchaseOrder, PurchaseOrderLine
+    pos = []
+    po_rows = db.execute(select(PurchaseOrder).order_by(PurchaseOrder.created_at.desc())).scalars().all()
+    for po in po_rows:
+        pols = db.execute(select(PurchaseOrderLine).where(PurchaseOrderLine.po_id == po.id)).scalars().all()
+        po_lines = []
+        total_remaining = 0
+        for pol in pols:
+            ordered = int(pol.qty_ordered or 0)
+            received = int(pol.qty_received or 0)
+            remaining = max(ordered - received, 0)
+            po_lines.append({
+                "line": pol,
+                "item": pol.item,
+                "ordered": ordered,
+                "received": received,
+                "remaining": remaining,
+            })
+            total_remaining += remaining
+        pos.append({
+            "po": po,
+            "lines": po_lines,
+            "total_remaining": total_remaining,
+        })
+    return templates.TemplateResponse("po_list.html", {"request": request, "user": current_user, "pos": pos})
+
+@app.post("/po/new")
+def po_new(
+    request: Request,
+    code: str = Form(...),
+    supplier: str = Form(""),
+    db: Session = Depends(get_db),
+    current_user=Depends(require_user),
+):
+    from .models import PurchaseOrder
+    code = (code or "").strip()
+    supplier = (supplier or "").strip()
+    po = db.execute(select(PurchaseOrder).where(PurchaseOrder.code == code)).scalar_one_or_none()
+    if not po:
+        po = PurchaseOrder(code=code, supplier=supplier, created_at=datetime.utcnow())
+        db.add(po); db.commit()
+    return RedirectResponse(url="/po", status_code=303)
+
+@app.post("/po/{po_id}/line/add")
+def po_line_add(
+    request: Request,
+    po_id: int,
+    item_id: int | None = Form(None),
+    sku: str | None = Form(None),
+    qty: int = Form(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(require_user),
+):
+    from .models import PurchaseOrderLine, PurchaseOrder
+    po = db.get(PurchaseOrder, po_id)
+    if not po:
+        raise HTTPException(status_code=404)
+    item = None
+    if item_id:
+        item = db.get(Item, int(item_id))
+    if not item and sku:
+        item = db.execute(select(Item).where(Item.sku == sku.strip())).scalar_one_or_none()
+    if not item:
+        raise HTTPException(status_code=400, detail="Ugyldig vare")
+    pol = db.execute(select(PurchaseOrderLine).where(PurchaseOrderLine.po_id == po.id, PurchaseOrderLine.item_id == item.id)).scalar_one_or_none()
+    if not pol:
+        pol = PurchaseOrderLine(po_id=po.id, item_id=item.id, qty_ordered=0, qty_received=0)
+        db.add(pol)
+    pol.qty_ordered = (pol.qty_ordered or 0) + int(qty)
+    db.commit()
+    return RedirectResponse(url="/po", status_code=303)
+
+@app.post("/po/{po_id}/receive")
+async def po_receive(
+    request: Request,
+    po_id: int,
+    item_id: int = Form(...),
+    qty: int = Form(...),
+    co_code: str | None = Form(None),
+    auto_reserve: str | None = Form(None),
+    note: str = Form("Mottak"),
+    db: Session = Depends(get_db),
+    current_user=Depends(require_user),
+):
+    from .models import PurchaseOrder
+    po = db.get(PurchaseOrder, po_id)
+    item = db.get(Item, int(item_id)) if po else None
+    if not po or not item:
+        raise HTTPException(status_code=404)
+    # Mottak spesielt knyttet til denne PO-en (bruk po.code)
+    tx = crud.create_units_for_receive(db, item, qty=int(qty), po_code=po.code, note=f"{note} (PO {po.code})", actor=current_user)
+    # Valgfri auto-reservasjon til CO + trekk bestilt
+    if co_code and auto_reserve:
+        try:
+            co = crud.get_or_create_co_by_code(db, co_code.strip(), None)
+            crud.reserve_units(db, item, co, qty=int(qty), note="Auto-reservasjon etter mottak", actor=current_user)
+            crud.reduce_ordered_on_co_line(db, co, item, int(qty), note="Auto: mottak")
+        except HTTPException:
+            pass
+    # send til item units
+    await bcast.publish({
+        "type": "tx",
+        "id": tx.id,
+        "name": tx.name,
+        "sku": tx.sku,
+        "delta": tx.delta,
+        "note": tx.note,
+        "ts": tx.ts.isoformat(),
+        "by": tx.user_name,
+    })
+    return RedirectResponse(url=f"/item/{item.id}/units", status_code=303)
 
 @app.get("/dev/whoami")
 def dev_whoami(db: Session = Depends(get_db), current_user = Depends(require_user)):
@@ -354,7 +560,7 @@ def item_units_page(request: Request, item_id: int, db: Session = Depends(get_db
         "count_avail": avail, "count_res": res, "count_used": used
     })
 
-@app.post("/receive")
+@app.post("/receive/legacy")
 async def receive_post(
     request: Request,
     sku: str = Form(...),
@@ -478,7 +684,7 @@ async def item_units_reserve(
     current_user = Depends(require_user),
 ):
     ids = [int(x) for x in unit_ids.split(",") if x.strip()]
-    crud.reserve_units(db, ids, co_code=co_code, note=note, actor=current_user)
+    crud.reserve_units_by_ids(db, ids, co_code=co_code, note=note, actor=current_user)
     return RedirectResponse(url=f"/item/{item_id}/units", status_code=303)
 
 @app.post("/item/{item_id}/units/unreserve")
@@ -527,24 +733,55 @@ def receive_page(request: Request, current_user=Depends(require_user)):
     return templates.TemplateResponse("receive.html", {"request": request, "user": current_user})
 
 @app.post("/receive")
-def receive_post(
+async def receive_post(
+    request: Request,
     sku: str = Form(...),
-    qty: int = Form(...),
-    po_code: str = Form(...),
+    qty: int = Form(1),
+    po_code: str = Form(""),
     note: str = Form("Mottak"),
+    co_code: str | None = Form(None),
+    auto_reserve: str | None = Form(None),
     db: Session = Depends(get_db),
     current_user = Depends(require_user),
 ):
-    item = db.execute(select(Item).where(Item.sku == sku.strip())).scalar_one_or_none()
+    sku = (sku or "").strip()
+    qty = max(1, int(qty))
+    # Slå opp eller auto-opprett vare
+    item = db.execute(select(Item).where(Item.sku == sku)).scalar_one_or_none()
     if not item:
-        raise HTTPException(status_code=400, detail=f"Ukjent SKU: {sku}")
+        item = crud.create_item(
+            db, actor=current_user,
+            name=sku, sku=sku, qty=0, min_qty=0, price=0.0,
+            currency="NOK", category="Uncategorized", location="Hovedlager", notes="",
+        )
 
-    # NYTT: opprett faktiske enheter + koble til PO
-    crud.create_units_for_receive(
-        db, item, qty=qty, po_code=po_code.strip(), note=note, actor=current_user
+    # Registrer mottak og knytt til PO hvis angitt
+    tx = crud.create_units_for_receive(
+        db, item, qty=qty, po_code=(po_code or "").strip(), note=(note.strip() or "Mottak"), actor=current_user
     )
 
+    # Valgfritt: Reserver til en angitt CO, og trekk ned 'bestilt' på linja
+    if co_code and auto_reserve:
+        co_code = co_code.strip()
+        try:
+            co = crud.get_or_create_co_by_code(db, co_code, None)
+            crud.reserve_units(db, item, co, qty=qty, note="Auto-reservasjon etter mottak", actor=current_user)
+            crud.reduce_ordered_on_co_line(db, co, item, qty, note="Auto: mottak")
+        except HTTPException as e:
+            request.session["flash_error"] = f"Mottak gjennomført, men reservasjon feilet: {e.detail}"
+
     # Etter enkelt-mottak: gå rett til enhetssiden så du ser tellere og rader
+    await bcast.publish({
+        "type": "tx",
+        "id": tx.id,
+        "name": tx.name,
+        "sku": tx.sku,
+        "delta": tx.delta,
+        "note": tx.note,
+        "ts": tx.ts.isoformat(),
+        "by": tx.user_name,
+    })
+
     return RedirectResponse(url=f"/item/{item.id}/units", status_code=303)
 
 @app.get("/tx", response_class=HTMLResponse)
@@ -744,6 +981,7 @@ def co_list(
     q: str | None = None,
     customer_id: int | None = None,
     status: str | None = None,
+    only_ordered: int | None = None,
     db: Session = Depends(get_db),
     current_user=Depends(require_user),
 ):
@@ -757,7 +995,14 @@ def co_list(
     if status and status.strip():
         stmt = stmt.where(CustomerOrder.status == status.strip())
     rows = db.execute(stmt).scalars().all()
+    # Bestilt-summer pr CO
+    totals = {cid: total for cid, total in db.execute(
+        select(CustomerOrderLine.co_id, func.sum(CustomerOrderLine.qty)).group_by(CustomerOrderLine.co_id)
+    ).all()}
+    if only_ordered:
+        rows = [co for co in rows if (totals.get(co.id, 0) or 0) > 0]
     customers = db.execute(select(Customer).order_by(Customer.name.asc())).scalars().all()
+    total_ordered = sum(int(totals.get(co.id, 0) or 0) for co in rows)
     return templates.TemplateResponse(
         "co_list.html",
         {
@@ -768,6 +1013,9 @@ def co_list(
             "q": q or "",
             "selected_customer_id": int(customer_id) if customer_id else None,
             "selected_status": status or "",
+            "ordered_totals": totals,
+            "only_ordered": 1 if only_ordered else 0,
+            "total_ordered": int(total_ordered),
         },
     )
 
@@ -794,7 +1042,60 @@ def co_detail(request: Request, co_id: int, db: Session = Depends(get_db), curre
     if not co:
         raise HTTPException(status_code=404)
     lines = db.execute(select(CustomerOrderLine).where(CustomerOrderLine.co_id == co.id)).scalars().all()
-    return templates.TemplateResponse("co_detail.html", {"request": request, "user": current_user, "co": co, "lines": lines})
+    # Brukes for datalist ved "Legg til vare" (begrenset for ytelse)
+    items_for_datalist = db.execute(select(Item).order_by(Item.name.asc()).limit(300)).scalars().all()
+    return templates.TemplateResponse(
+        "co_detail.html",
+        {
+            "request": request,
+            "user": current_user,
+            "co": co,
+            "lines": lines,
+            "items_for_datalist": items_for_datalist,
+        },
+    )
+
+@app.post("/co/{co_id}/notes")
+def co_update_notes(
+    request: Request, co_id: int,
+    notes: str = Form(""),
+    db: Session = Depends(get_db), current_user=Depends(require_user)
+):
+    co = db.get(CustomerOrder, co_id)
+    if not co:
+        raise HTTPException(status_code=404)
+    co.notes = (notes or "").strip()
+    db.commit()
+    return RedirectResponse(url=f"/co/{co.id}", status_code=303)
+
+@app.post("/co/{co_id}/line/add")
+def co_line_add(
+    request: Request,
+    co_id: int,
+    item_id: int | None = Form(None),
+    sku: str | None = Form(None),
+    db: Session = Depends(get_db),
+    current_user=Depends(require_user),
+):
+    co = db.get(CustomerOrder, co_id)
+    if not co:
+        raise HTTPException(status_code=404)
+
+    item = None
+    if item_id:
+        item = db.get(Item, int(item_id))
+    if not item and sku:
+        s = sku.strip()
+        if s:
+            item = db.execute(select(Item).where(Item.sku == s)).scalar_one_or_none()
+    if not item:
+        request.session["flash_error"] = "Fant ikke varen. Velg en gyldig SKU."
+        return RedirectResponse(url=f"/co/{co.id}", status_code=303)
+
+    # Sørg for at linjen eksisterer, men ikke endre antall (0/0/0)
+    crud.ensure_line(db, co, item)
+    request.session["flash_success"] = f"La til {item.name} på {co.code}."
+    return RedirectResponse(url=f"/co/{co.id}", status_code=303)
 
 @app.get("/co/{co_id}/delete")
 def co_delete_confirm(request: Request, co_id: int, db: Session = Depends(get_db), current_user=Depends(require_user)):
@@ -901,7 +1202,8 @@ def co_reserve(
     co = db.get(CustomerOrder, co_id); item = db.get(Item, int(item_id))
     if not co or not item:
         raise HTTPException(status_code=404)
-    crud.reserve_qty_for_customer(db, item_id=item.id, qty=int(qty), customer_id=(co.customer_id or 0), note=note, actor=current_user, co_id=co.id)
+    # Reserver fra lager til denne CO-en uten å endre 'bestilt' (qty_ordered)
+    crud.reserve_units(db, item, co, qty=int(qty), note=note, actor=current_user)
     return RedirectResponse(url=f"/co/{co.id}", status_code=303)
 
 @app.post("/co/{co_id}/unfulfill")
@@ -953,6 +1255,7 @@ def co_receive(
     item_id: int = Form(...),
     qty: int = Form(...),
     po_code: str = Form(...),
+    auto_reserve: str | None = Form(None),
     note: str = Form("Mottak"),
     db: Session = Depends(get_db), current_user=Depends(require_user)
 ):
@@ -960,4 +1263,19 @@ def co_receive(
     if not co or not item:
         raise HTTPException(status_code=404)
     crud.create_units_for_receive(db, item, qty=int(qty), po_code=po_code.strip(), note=f"{note} (CO {co.code})", actor=current_user)
+    if auto_reserve:
+        # Reserver samme antall til denne CO-en og trekk ned 'bestilt'
+        try:
+            crud.reserve_qty_for_customer(
+                db,
+                item_id=item.id,
+                qty=int(qty),
+                customer_id=(co.customer_id or 0),
+                note="Auto-reservasjon etter mottak",
+                actor=current_user,
+                co_id=co.id,
+            )
+            crud.reduce_ordered_on_co_line(db, co, item, int(qty), note="Auto: mottak")
+        except HTTPException:
+            pass
     return RedirectResponse(url=f"/co/{co.id}", status_code=303)

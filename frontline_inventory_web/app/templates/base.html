@@ -27,8 +27,20 @@
   <a href="/" class="px-3 py-1.5 rounded-lg border border-zinc-300">Oversikt</a>
   <a href="/item/new" class="px-3 py-1.5 rounded-lg bg-zinc-900 text-white">+ Ny</a>
   <a href="/receive" class="px-3 py-1.5 rounded-lg border border-zinc-300">Mottak</a>
-<a href="/customers" class="hover:underline">Kunder</a>
-<a href="/co" class="hover:underline">Kundeordre</a>
+  <details class="relative">
+    <summary class="px-3 py-1.5 rounded-lg border border-zinc-300 cursor-pointer select-none">Bestillinger</summary>
+    <div class="absolute right-0 mt-1 z-10 min-w-48 rounded-lg border bg-white shadow p-2 space-y-1">
+      <a class="block px-3 py-1.5 rounded hover:bg-zinc-50" href="/orders">Kunde‑bestillinger</a>
+      <a class="block px-3 py-1.5 rounded hover:bg-zinc-50" href="/po">Leverandørordre</a>
+    </div>
+  </details>
+  <details class="relative">
+    <summary class="px-3 py-1.5 rounded-lg border border-zinc-300 cursor-pointer select-none">Kunder</summary>
+    <div class="absolute right-0 mt-1 z-10 min-w-48 rounded-lg border bg-white shadow p-2 space-y-1">
+      <a class="block px-3 py-1.5 rounded hover:bg-zinc-50" href="/customers">Kundeliste</a>
+      <a class="block px-3 py-1.5 rounded hover:bg-zinc-50" href="/co">Kundeordre</a>
+    </div>
+  </details>
   <a href="/tx" class="px-3 py-1.5 rounded-lg border border-zinc-300">Logg</a>
   <a href="/import" class="px-3 py-1.5 rounded-lg border border-zinc-300">Import/Export</a>
 {% if user and user.role == 'admin' %}

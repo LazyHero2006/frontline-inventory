@@ -67,7 +67,8 @@
     ondblclick="window.location.href='/item/{{ i.id }}/units'">
         <td class="p-2">
           <div class="font-medium flex items-center gap-2">
-            {% if i.qty <= i.min_qty %}<span class="inline-block w-2 h-2 rounded-full bg-rose-500" title="Lav beholdning"></span>{% endif %}
+            {% set avail = (avail_counts[i.id] if avail_counts and i.id in avail_counts else 0) %}
+            {% if avail <= 0 or avail <= i.min_qty %}<span class="inline-block w-2 h-2 rounded-full bg-rose-500" title="Lav beholdning"></span>{% endif %}
             {% if i.image_path %}<img src="{{ i.image_path }}" class="w-16 h-16 object-cover rounded">{% endif %}
             {{ i.name }}
           </div>
