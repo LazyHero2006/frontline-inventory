@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="text-xl font-semibold mb-3">Skann til PO</h1>
+
+<section class="rounded-2xl border bg-white p-3 mb-4">
+  <div class="grid md:grid-cols-2 gap-4">
+    <div>
+      <h2 class="font-semibold mb-2">Kamera</h2>
+      <video id="preview" class="w-full aspect-[4/3] object-cover rounded" playsinline></video>
+      <div class="text-xs text-zinc-500 mt-1">Skann EAN/SKU. Hver skann øker antallet.</div>
+    </div>
+    <div>
+      <form method="post" action="/po/scan" id="scanForm" class="space-y-2">
+        <div>
+          <label class="block text-xs text-zinc-600">PO-kode</label>
+          <input name="po_code" class="px-2 py-1 rounded border w-64" placeholder="PO-2025-001" required>
+        </div>
+        <div>
+          <label class="block text-xs text-zinc-600">Standard pris (for nye linjer)</label>
+          <input id="default_price" type="number" step="0.01" class="px-2 py-1 rounded border w-32" placeholder="0.00">
+        </div>
+        <input type="hidden" name="payload" id="payload">
+        <table class="w-full text-sm mt-2" id="linesTable">
+          <thead class="bg-zinc-100">
+            <tr>
+              <th class="p-2 text-left">SKU</th>
+              <th class="p-2 text-left">Vare</th>
+              <th class="p-2">Antall</th>
+              <th class="p-2">Pris</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <div class="flex gap-2 mt-2">
+          <button class="px-3 py-2 rounded bg-zinc-900 text-white">Registrer mottak</button>
+          <a href="/po" class="px-3 py-2 rounded border">Avbryt</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</section>
+
+<script src="https://unpkg.com/@zxing/library@latest"></script>
+<script>
+(function(){
+  const video = document.getElementById('preview');
+  const tbl = document.getElementById('linesTable').querySelector('tbody');
+  const dfltPrice = document.getElementById('default_price');
+  const payload = document.getElementById('payload');
+  const lines = new Map(); // sku -> {sku, name, qty, price}
+
+  function render(){
+    tbl.innerHTML = '';
+    for (const [sku, row] of lines) {
+      const tr = document.createElement('tr');
+      tr.className = 'odd:bg-zinc-50';
+      tr.innerHTML = `
+        <td class="p-2 whitespace-nowrap">${sku}</td>
+        <td class="p-2"><span class="nm">${row.name||''}</span></td>
+        <td class="p-2"><input type="number" min="1" class="w-20 px-2 py-1 rounded border qty" value="${row.qty}"></td>
+        <td class="p-2"><input type="number" step="0.01" class="w-24 px-2 py-1 rounded border price" value="${row.price ?? ''}"></td>`;
+      tbl.appendChild(tr);
+      // wire updates
+      tr.querySelector('.qty').addEventListener('input', e => { row.qty = Math.max(1, parseInt(e.target.value||'1')); sync(); });
+      tr.querySelector('.price').addEventListener('input', e => { row.price = parseFloat(e.target.value||'0')||0; sync(); });
+    }
+  }
+  function sync(){
+    payload.value = JSON.stringify(Array.from(lines.values()));
+  }
+
+  async function ensureName(sku){
+    try{
+      const r = await fetch(`/api/item/by_sku?sku=${encodeURIComponent(sku)}`, {credentials:'same-origin'});
+      if (!r.ok) return;
+      const j = await r.json();
+      const row = lines.get(sku);
+      if (row && j.exists) { row.name = j.name || ''; render(); sync(); }
+    }catch{}
+  }
+
+  function bump(sku){
+    if (!sku) return;
+    const cur = lines.get(sku) || {sku, name:'', qty:0, price: (parseFloat(dfltPrice.value)||0)};
+    cur.qty += 1;
+    lines.set(sku, cur);
+    ensureName(sku);
+    render(); sync();
+  }
+
+  // camera
+  (async function(){
+    try{
+      video.setAttribute('playsinline', 'true');
+      const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}});
+      video.srcObject = stream; await video.play();
+      const reader = new ZXing.BrowserMultiFormatReader();
+      await reader.decodeFromVideoDevice(null, 'preview', (result, err) => {
+        if (result) { bump(result.getText().trim()); }
+      });
+    }catch(e){ console.warn('Kamera ikke tilgjengelig', e); }
+  })();
+})();
+</script>
+{% endblock %}

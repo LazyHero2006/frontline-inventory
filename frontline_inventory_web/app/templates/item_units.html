@@ -64,25 +64,7 @@
   </form>
 </div>
 
-<!-- Mottak (opprett enheter) -->
-<div class="rounded-2xl border p-4 bg-white mb-4">
-  <h2 class="font-semibold mb-2">Mottak (opprett enheter)</h2>
-  <form method="post" action="/item/{{ item.id }}/units/receive" class="flex gap-2 items-end">
-    <div>
-      <label class="block text-sm text-zinc-600">Antall</label>
-      <input type="number" name="qty" min="1" value="1" class="px-3 py-2 rounded border" required>
-    </div>
-    <div>
-      <label class="block text-sm text-zinc-600">Bestillingsordre (PO-kode)</label>
-      <input type="text" name="po_code" placeholder="PO-2025-001" class="px-3 py-2 rounded border" required>
-    </div>
-    <div class="flex-1">
-      <label class="block text-sm text-zinc-600">Notat</label>
-      <input type="text" name="note" value="Mottak" class="px-3 py-2 rounded border w-full">
-    </div>
-    <button class="px-3 py-2 rounded bg-zinc-900 text-white">+ Opprett</button>
-  </form>
-</div>
+<!-- Mottak gjennomføres via PO-siden -->
 
 <!-- Enhetsliste + batch-handlinger (CO-reservasjon, opphev, uttak) -->
 <div class="rounded-2xl border bg-white overflow-hidden">
@@ -117,6 +99,7 @@
         <th class="p-2">ID</th>
         <th class="p-2">Status</th>
         <th class="p-2">PO</th>
+        <th class="p-2">Pris</th>
         <th class="p-2">Reservasjon (CO)</th>
         <th class="p-2">Opprettet</th>
         <th class="p-2">Brukt</th>
@@ -137,13 +120,14 @@
           {% endif %}
         </td>
         <td class="p-2">{% if u.po %}{{ u.po.code }}{% endif %}</td>
+        <td class="p-2 whitespace-nowrap">{% if u.purchase_price is not none %}{{ '%.2f'|format(u.purchase_price) }}{% endif %}</td>
         <td class="p-2">{% if u.reserved_co %}<a href="/co/{{ u.reserved_co.id }}" class="underline hover:no-underline">{{ u.reserved_co.code }}</a>{% endif %}</td>
         <td class="p-2 whitespace-nowrap">{{ u.created_at.strftime('%Y-%m-%d %H:%M') if u.created_at }}</td>
         <td class="p-2 whitespace-nowrap">{% if u.used_at %}{{ u.used_at.strftime('%Y-%m-%d %H:%M') }}{% endif %}</td>
       </tr>
       {% endfor %}
       {% if units|length == 0 %}
-      <tr><td class="p-3 text-zinc-500" colspan="7">Ingen enheter registrert ennå.</td></tr>
+      <tr><td class="p-3 text-zinc-500" colspan="8">Ingen enheter registrert ennå.</td></tr>
       {% endif %}
     </tbody>
   </table>
@@ -287,3 +271,4 @@
 </script>
 
 {% endblock %}
+

@@ -251,6 +251,21 @@ def ensure_migrations():
         # Valgfri: reserved_customer_id hvis du vil ha direkte kobling til kunde
         if "reserved_customer_id" not in iu_names:
             cur.execute("ALTER TABLE item_units ADD COLUMN reserved_customer_id INTEGER NULL")
+        # Enhetskost (innkjøpspris) per enhet
+        if "purchase_price" not in iu_names:
+            cur.execute("ALTER TABLE item_units ADD COLUMN purchase_price FLOAT DEFAULT 0.0")
+
+    # ------------------------------------------------------------
+    # purchase_orders - legg til pdf_path + archived for opplastet dokument og arkiv
+    # ------------------------------------------------------------
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='purchase_orders'")
+    if cur.fetchone():
+        cur.execute("PRAGMA table_info(purchase_orders)")
+        po_cols = [r[1] for r in cur.fetchall()]
+        if "pdf_path" not in po_cols:
+            cur.execute("ALTER TABLE purchase_orders ADD COLUMN pdf_path VARCHAR(300) DEFAULT ''")
+        if "archived" not in po_cols:
+            cur.execute("ALTER TABLE purchase_orders ADD COLUMN archived INTEGER DEFAULT 0")
 
     # ------------------------------------------------------------
     # purchase_order_lines – nullable item_id + ON DELETE SET NULL

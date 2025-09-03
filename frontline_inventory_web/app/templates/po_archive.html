@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="text-xl font-semibold mb-3">PO-arkiv</h1>
+
+<form method="get" action="/po/archive" class="rounded-2xl border bg-white p-3 mb-4 flex gap-2 items-end">
+  <div>
+    <label class="block text-xs text-zinc-600">Søk</label>
+    <input name="q" value="{{ q or '' }}" class="px-2 py-1 rounded border w-64" placeholder="Søk kode/leverandør">
+  </div>
+  <button class="px-3 py-1.5 rounded border">Filtrer</button>
+  <a href="/po" class="ml-auto px-3 py-1.5 rounded border">Til aktive</a>
+  </form>
+
+{% if pos and pos|length == 0 %}
+  <div class="rounded-xl border border-zinc-200 bg-white p-4 text-zinc-600">Ingen arkiverte PO-er.</div>
+{% endif %}
+
+<div class="space-y-4">
+  {% for p in pos %}
+  <section class="rounded-2xl border border-zinc-200 bg-white">
+    <div class="p-3 flex items-center gap-2 border-b border-zinc-100">
+      <div class="font-semibold">{{ p.po.code }}</div>
+      <div class="text-sm text-zinc-600">{{ p.po.supplier }}</div>
+      {% if p.po.pdf_path %}<a class="text-xs underline" href="{{ p.po.pdf_path }}" target="_blank">PDF</a>{% endif %}
+      <form method="post" action="/po/{{ p.po.id }}/unarchive" class="ml-auto">
+        <button class="px-2 py-1 rounded border text-xs" title="Flytt tilbake">Gjenopprett</button>
+      </form>
+    </div>
+    <table class="w-full text-sm">
+      <thead class="bg-zinc-100">
+        <tr>
+          <th class="p-2 text-left">Vare</th>
+          <th class="p-2 text-right">Bestilt</th>
+          <th class="p-2 text-right">Mottatt</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for l in p.lines %}
+        <tr class="odd:bg-zinc-50">
+          <td class="p-2">{% if l.item %}{{ l.item.name }}<div class="text-xs text-zinc-500">{{ l.item.sku }}</div>{% else %}{{ l.item_id }}{% endif %}</td>
+          <td class="p-2 text-right">{{ l.qty_ordered }}</td>
+          <td class="p-2 text-right">{{ l.qty_received }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endfor %}
+</div>
+{% endblock %}

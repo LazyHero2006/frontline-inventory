@@ -15,45 +15,43 @@
 <header class="sticky top-0 z-10 backdrop-blur bg-white/80 border-b border-zinc-200">
   <div class="container mx-auto px-4 py-3 flex items-center gap-3">
     <a href="/" class="flex items-center gap-2 group">
-  <img src="/static/frontline-logo.svg" alt="Frontline" class="h-12 w-50 rounded">
-  <span class="font-black tracking-tight text-xl group-hover:underline">
-    • Inventory
-  </span>
-</a>
+      <img src="/static/frontline-logo.svg" alt="Frontline" class="h-12 rounded">
+      <span class="font-black tracking-tight text-xl group-hover:underline">Inventory</span>
+    </a>
     {% if low_count is defined and low_count > 0 %}
     <span class="text-xs px-2 py-1 rounded-full bg-rose-600 text-white">{{ low_count }} lav beholdning</span>
     {% endif %}
     <nav class="ml-auto flex items-center gap-2">
-  <a href="/" class="px-3 py-1.5 rounded-lg border border-zinc-300">Oversikt</a>
-  <a href="/item/new" class="px-3 py-1.5 rounded-lg bg-zinc-900 text-white">+ Ny</a>
-  <a href="/receive" class="px-3 py-1.5 rounded-lg border border-zinc-300">Mottak</a>
-  <details class="relative">
-    <summary class="px-3 py-1.5 rounded-lg border border-zinc-300 cursor-pointer select-none">Bestillinger</summary>
-    <div class="absolute right-0 mt-1 z-10 min-w-48 rounded-lg border bg-white shadow p-2 space-y-1">
-      <a class="block px-3 py-1.5 rounded hover:bg-zinc-50" href="/orders">Kunde‑bestillinger</a>
-      <a class="block px-3 py-1.5 rounded hover:bg-zinc-50" href="/po">Leverandørordre</a>
-    </div>
-  </details>
-  <details class="relative">
-    <summary class="px-3 py-1.5 rounded-lg border border-zinc-300 cursor-pointer select-none">Kunder</summary>
-    <div class="absolute right-0 mt-1 z-10 min-w-48 rounded-lg border bg-white shadow p-2 space-y-1">
-      <a class="block px-3 py-1.5 rounded hover:bg-zinc-50" href="/customers">Kundeliste</a>
-      <a class="block px-3 py-1.5 rounded hover:bg-zinc-50" href="/co">Kundeordre</a>
-    </div>
-  </details>
-  <a href="/tx" class="px-3 py-1.5 rounded-lg border border-zinc-300">Logg</a>
-  <a href="/import" class="px-3 py-1.5 rounded-lg border border-zinc-300">Import/Export</a>
-{% if user and user.role == 'admin' %}
-  <a href="/admin/users" class="px-3 py-1.5 rounded-lg border border-zinc-300">Admin</a>
-{% endif %}
-  <form action="/auth/logout" method="post" class="ml-2">
-    <button class="px-3 py-1.5 rounded-lg border border-zinc-300">Logg ut</button>
-  </form>
-</nav>
+      <a href="/" class="px-3 py-1.5 rounded-lg border border-zinc-300">Oversikt</a>
+      <a href="/item/new" class="px-3 py-1.5 rounded-lg bg-zinc-900 text-white">+ Ny</a>
+      <details class="relative">
+        <summary class="px-3 py-1.5 rounded-lg border border-zinc-300 cursor-pointer select-none">Bestillinger</summary>
+        <div class="absolute right-0 mt-1 z-10 min-w-48 rounded-lg border bg-white shadow p-2 space-y-1">
+          <a class="block px-3 py-1.5 rounded hover:bg-zinc-50" href="/orders">Kundebestillinger</a>
+          <a class="block px-3 py-1.5 rounded hover:bg-zinc-50" href="/po">Leverandørordre</a>
+          <a class="block px-3 py-1.5 rounded hover:bg-zinc-50" href="/po/scan">PO-skann</a>
+          <a class="block px-3 py-1.5 rounded hover:bg-zinc-50" href="/po/archive">PO-arkiv</a>
+        </div>
+      </details>
+      <details class="relative">
+        <summary class="px-3 py-1.5 rounded-lg border border-zinc-300 cursor-pointer select-none">Kunder</summary>
+        <div class="absolute right-0 mt-1 z-10 min-w-48 rounded-lg border bg-white shadow p-2 space-y-1">
+          <a class="block px-3 py-1.5 rounded hover:bg-zinc-50" href="/customers">Kundeliste</a>
+          <a class="block px-3 py-1.5 rounded hover:bg-zinc-50" href="/co">Kundeordre</a>
+        </div>
+      </details>
+      <a href="/tx" class="px-3 py-1.5 rounded-lg border border-zinc-300">Logg</a>
+      <a href="/import" class="px-3 py-1.5 rounded-lg border border-zinc-300">Import/Export</a>
+      {% if user and user.role == 'admin' %}
+        <a href="/admin/users" class="px-3 py-1.5 rounded-lg border border-zinc-300">Admin</a>
+      {% endif %}
+      <form action="/auth/logout" method="post" class="ml-2">
+        <button class="px-3 py-1.5 rounded-lg border border-zinc-300">Logg ut</button>
+      </form>
+    </nav>
   </div>
 </header>
 <main class="container mx-auto px-4 py-6">
-  <!-- Flash-meldinger skal ligge UTEFOR block content -->
   {% if request.session.get('flash_error') %}
     <div class="mb-3 rounded-lg border border-rose-200 bg-rose-50 text-rose-800 px-3 py-2">
       {{ request.session.pop('flash_error') }}
@@ -64,8 +62,20 @@
       {{ request.session.pop('flash_success') }}
     </div>
   {% endif %}
-
   {% block content %}{% endblock %}
 </main>
+<script>
+  // Kun ett dropdown (details) åpent om gangen i topplinjen
+  (function(){
+    const nav = document.querySelector('header nav');
+    if (!nav) return;
+    const all = Array.from(nav.querySelectorAll('details'));
+    all.forEach(d => d.addEventListener('toggle', () => {
+      if (d.open) {
+        all.filter(x => x !== d).forEach(x => x.removeAttribute('open'));
+      }
+    }));
+  })();
+</script>
 </body>
 </html>

@@ -195,7 +195,7 @@ def orders_overview(
     # Leverandørordre (PO) oversikt
     from .models import PurchaseOrder, PurchaseOrderLine
     pos = []
-    po_rows = db.execute(select(PurchaseOrder).order_by(PurchaseOrder.created_at.desc())).scalars().all()
+    po_rows = db.execute(select(PurchaseOrder).where(PurchaseOrder.archived == False).order_by(PurchaseOrder.created_at.desc())).scalars().all()
     for po in po_rows:
         pols = db.execute(select(PurchaseOrderLine).where(PurchaseOrderLine.po_id == po.id)).scalars().all()
         po_lines = []
@@ -220,7 +220,7 @@ def orders_overview(
 
     # PO-koder for mottak-datalist i denne visningen
     from .models import PurchaseOrder
-    po_rows = db.execute(select(PurchaseOrder).order_by(PurchaseOrder.created_at.desc())).scalars().all()
+    po_rows = db.execute(select(PurchaseOrder).where(PurchaseOrder.archived == False).order_by(PurchaseOrder.created_at.desc())).scalars().all()
     po_codes = [po.code for po in po_rows]
 
     return templates.TemplateResponse(
@@ -234,11 +234,36 @@ def orders_overview(
         },
     )
 
+@app.get("/api/item/by_sku")
+def api_item_by_sku(sku: str, db: Session = Depends(get_db), current_user=Depends(require_user)):
+    sku = (sku or "").strip()
+    if not sku:
+        return {"exists": False}
+    it = db.execute(select(Item).where(Item.sku == sku)).scalar_one_or_none()
+    if not it:
+        return {"exists": False, "sku": sku}
+    return {"exists": True, "id": it.id, "sku": it.sku, "name": it.name}
+
 @app.get("/po", response_class=HTMLResponse)
-def po_page(request: Request, db: Session = Depends(get_db), current_user=Depends(require_user)):
+def po_page(
+    request: Request,
+    q: str = "",
+    sort: str = "newest",  # newest | oldest
+    db: Session = Depends(get_db),
+    current_user=Depends(require_user),
+):
     from .models import PurchaseOrder, PurchaseOrderLine
     pos = []
-    po_rows = db.execute(select(PurchaseOrder).order_by(PurchaseOrder.created_at.desc())).scalars().all()
+    stmt = select(PurchaseOrder).where(PurchaseOrder.archived == False)
+    if q:
+        like = f"%{q}%"
+        from sqlalchemy import or_
+        stmt = stmt.where(or_(PurchaseOrder.code.like(like), PurchaseOrder.supplier.like(like)))
+    if sort == "oldest":
+        stmt = stmt.order_by(PurchaseOrder.created_at.asc())
+    else:
+        stmt = stmt.order_by(PurchaseOrder.created_at.desc())
+    po_rows = db.execute(stmt).scalars().all()
     for po in po_rows:
         pols = db.execute(select(PurchaseOrderLine).where(PurchaseOrderLine.po_id == po.id)).scalars().all()
         po_lines = []
@@ -260,13 +285,55 @@ def po_page(request: Request, db: Session = Depends(get_db), current_user=Depend
             "lines": po_lines,
             "total_remaining": total_remaining,
         })
-    return templates.TemplateResponse("po_list.html", {"request": request, "user": current_user, "pos": pos})
+    # Brukes for datalist ved SKU-søk i PO-linje
+    items_for_datalist = db.execute(select(Item).order_by(Item.name.asc()).limit(300)).scalars().all()
+    return templates.TemplateResponse(
+        "po_list.html",
+        {
+            "request": request,
+            "user": current_user,
+            "pos": pos,
+            "q": q,
+            "sort": sort,
+            "items_for_datalist": items_for_datalist,
+        },
+    )
+
+@app.get("/po/scan", response_class=HTMLResponse)
+def po_scan_page(request: Request, current_user=Depends(require_user)):
+    return templates.TemplateResponse("po_scan.html", {"request": request, "user": current_user})
+
+@app.post("/po/scan")
+async def po_scan_submit(
+    request: Request,
+    po_code: str = Form(...),
+    payload: str = Form("[]"),
+    db: Session = Depends(get_db),
+    current_user=Depends(require_user),
+):
+    try:
+        lines = json.loads(payload or "[]")
+    except Exception:
+        lines = []
+    po_code = (po_code or "").strip()
+    for line in lines:
+        sku = str(line.get("sku", "")).strip()
+        qty = int(line.get("qty", 1))
+        price = float(line.get("price", 0) or 0)
+        if not sku or qty <= 0:
+            continue
+        item = db.execute(select(Item).where(Item.sku == sku)).scalar_one_or_none()
+        if not item:
+            item = crud.create_item(db, actor=current_user, name=sku, sku=sku, qty=0, min_qty=0, price=price, currency="NOK", category="Uncategorized", location="Hovedlager", notes="")
+        crud.create_units_for_receive(db, item, qty=qty, po_code=po_code, note=f"Mottak (skann)", actor=current_user, unit_price=price)
+    return RedirectResponse(url="/po", status_code=303)
 
 @app.post("/po/new")
 def po_new(
     request: Request,
     code: str = Form(...),
     supplier: str = Form(""),
+    pdf: UploadFile | None = File(None),
     db: Session = Depends(get_db),
     current_user=Depends(require_user),
 ):
@@ -276,7 +343,25 @@ def po_new(
     po = db.execute(select(PurchaseOrder).where(PurchaseOrder.code == code)).scalar_one_or_none()
     if not po:
         po = PurchaseOrder(code=code, supplier=supplier, created_at=datetime.utcnow())
-        db.add(po); db.commit()
+        db.add(po); db.commit(); db.refresh(po)
+    else:
+        # Oppdater leverandør hvis angitt
+        if supplier:
+            po.supplier = supplier
+    # Håndter PDF-opplasting hvis sendt
+    if pdf and pdf.filename:
+        uploads_dir = os.path.join(os.path.dirname(__file__), "static", "uploads", "po")
+        os.makedirs(uploads_dir, exist_ok=True)
+        # Enkelt filnavn: PO-kode + timestamp for å unngå kollisjon
+        ts = int(datetime.utcnow().timestamp())
+        # Forsøk å bevare .pdf-endelse
+        ext = os.path.splitext(pdf.filename)[1].lower() or ".pdf"
+        fname = f"{code}_{ts}{ext}"
+        fpath = os.path.join(uploads_dir, fname)
+        with open(fpath, "wb") as f:
+            f.write(pdf.file.read())
+        po.pdf_path = f"/static/uploads/po/{fname}"
+    db.commit()
     return RedirectResponse(url="/po", status_code=303)
 
 @app.post("/po/{po_id}/line/add")
@@ -308,12 +393,48 @@ def po_line_add(
     db.commit()
     return RedirectResponse(url="/po", status_code=303)
 
+@app.post("/po/{po_id}/archive")
+def po_archive_toggle(po_id: int, db: Session = Depends(get_db), current_user=Depends(require_user)):
+    from .models import PurchaseOrder
+    po = db.get(PurchaseOrder, po_id)
+    if not po:
+        raise HTTPException(status_code=404)
+    po.archived = True
+    db.commit()
+    return RedirectResponse(url="/po", status_code=303)
+
+@app.post("/po/{po_id}/unarchive")
+def po_unarchive(po_id: int, db: Session = Depends(get_db), current_user=Depends(require_user)):
+    from .models import PurchaseOrder
+    po = db.get(PurchaseOrder, po_id)
+    if not po:
+        raise HTTPException(status_code=404)
+    po.archived = False
+    db.commit()
+    return RedirectResponse(url="/po/archive", status_code=303)
+
+@app.get("/po/archive", response_class=HTMLResponse)
+def po_archive_page(request: Request, q: str = "", db: Session = Depends(get_db), current_user=Depends(require_user)):
+    from .models import PurchaseOrder, PurchaseOrderLine
+    stmt = select(PurchaseOrder).where(PurchaseOrder.archived == True)
+    if q:
+        like = f"%{q}%"; from sqlalchemy import or_
+        stmt = stmt.where(or_(PurchaseOrder.code.like(like), PurchaseOrder.supplier.like(like)))
+    rows = db.execute(stmt.order_by(PurchaseOrder.created_at.desc())).scalars().all()
+    pos = []
+    for po in rows:
+        pols = db.execute(select(PurchaseOrderLine).where(PurchaseOrderLine.po_id == po.id)).scalars().all()
+        total_remaining = sum(max(int(l.qty_ordered or 0) - int(l.qty_received or 0), 0) for l in pols)
+        pos.append({"po": po, "lines": pols, "total_remaining": total_remaining})
+    return templates.TemplateResponse("po_archive.html", {"request": request, "user": current_user, "pos": pos, "q": q})
+
 @app.post("/po/{po_id}/receive")
 async def po_receive(
     request: Request,
     po_id: int,
     item_id: int = Form(...),
     qty: int = Form(...),
+    price: float | None = Form(None),
     co_code: str | None = Form(None),
     auto_reserve: str | None = Form(None),
     note: str = Form("Mottak"),
@@ -326,7 +447,11 @@ async def po_receive(
     if not po or not item:
         raise HTTPException(status_code=404)
     # Mottak spesielt knyttet til denne PO-en (bruk po.code)
-    tx = crud.create_units_for_receive(db, item, qty=int(qty), po_code=po.code, note=f"{note} (PO {po.code})", actor=current_user)
+    tx = crud.create_units_for_receive(
+        db, item, qty=int(qty), po_code=po.code,
+        note=f"{note} (PO {po.code})", actor=current_user,
+        unit_price=price,
+    )
     # Valgfri auto-reservasjon til CO + trekk bestilt
     if co_code and auto_reserve:
         try:
@@ -347,6 +472,23 @@ async def po_receive(
         "by": tx.user_name,
     })
     return RedirectResponse(url=f"/item/{item.id}/units", status_code=303)
+
+@app.post("/po/{po_id}/undo_receive")
+def po_undo_receive(
+    request: Request,
+    po_id: int,
+    item_id: int = Form(...),
+    qty: int = Form(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(require_user),
+):
+    from .models import PurchaseOrder
+    po = db.get(PurchaseOrder, po_id)
+    item = db.get(Item, int(item_id)) if po else None
+    if not po or not item:
+        raise HTTPException(status_code=404)
+    tx = crud.undo_receive_units(db, item, int(qty), po=po, note=f"Angret mottak (PO {po.code})", actor=current_user)
+    return RedirectResponse(url="/po", status_code=303)
 
 @app.get("/dev/whoami")
 def dev_whoami(db: Session = Depends(get_db), current_user = Depends(require_user)):
@@ -738,6 +880,7 @@ async def receive_post(
     sku: str = Form(...),
     qty: int = Form(1),
     po_code: str = Form(""),
+    price: float | None = Form(None),
     note: str = Form("Mottak"),
     co_code: str | None = Form(None),
     auto_reserve: str | None = Form(None),
@@ -757,7 +900,7 @@ async def receive_post(
 
     # Registrer mottak og knytt til PO hvis angitt
     tx = crud.create_units_for_receive(
-        db, item, qty=qty, po_code=(po_code or "").strip(), note=(note.strip() or "Mottak"), actor=current_user
+        db, item, qty=qty, po_code=(po_code or "").strip(), note=(note.strip() or "Mottak"), actor=current_user, unit_price=price
     )
 
     # Valgfritt: Reserver til en angitt CO, og trekk ned 'bestilt' på linja
@@ -1255,6 +1398,7 @@ def co_receive(
     item_id: int = Form(...),
     qty: int = Form(...),
     po_code: str = Form(...),
+    price: float | None = Form(None),
     auto_reserve: str | None = Form(None),
     note: str = Form("Mottak"),
     db: Session = Depends(get_db), current_user=Depends(require_user)
@@ -1262,7 +1406,7 @@ def co_receive(
     co = db.get(CustomerOrder, co_id); item = db.get(Item, int(item_id))
     if not co or not item:
         raise HTTPException(status_code=404)
-    crud.create_units_for_receive(db, item, qty=int(qty), po_code=po_code.strip(), note=f"{note} (CO {co.code})", actor=current_user)
+    crud.create_units_for_receive(db, item, qty=int(qty), po_code=po_code.strip(), note=f"{note} (CO {co.code})", actor=current_user, unit_price=price)
     if auto_reserve:
         # Reserver samme antall til denne CO-en og trekk ned 'bestilt'
         try:
@@ -1278,4 +1422,23 @@ def co_receive(
             crud.reduce_ordered_on_co_line(db, co, item, int(qty), note="Auto: mottak")
         except HTTPException:
             pass
+    return RedirectResponse(url=f"/co/{co.id}", status_code=303)
+
+@app.post("/co/{co_id}/undo_receive")
+def co_undo_receive(
+    request: Request,
+    co_id: int,
+    item_id: int = Form(...),
+    qty: int = Form(...),
+    po_code: str = Form(""),
+    db: Session = Depends(get_db), current_user=Depends(require_user)
+):
+    co = db.get(CustomerOrder, co_id); item = db.get(Item, int(item_id))
+    if not co or not item:
+        raise HTTPException(status_code=404)
+    po = None
+    if po_code:
+        from .models import PurchaseOrder
+        po = db.execute(select(PurchaseOrder).where(PurchaseOrder.code == po_code.strip())).scalar_one_or_none()
+    crud.undo_receive_units(db, item, int(qty), po=po, note=f"Angret mottak (CO {co.code})", actor=current_user)
     return RedirectResponse(url=f"/co/{co.id}", status_code=303)

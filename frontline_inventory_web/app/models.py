@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Text, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, Text, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from datetime import datetime
 from .db import Base
@@ -74,6 +74,8 @@ class PurchaseOrder(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     code: Mapped[str] = mapped_column(String(80), unique=True, index=True)     # f.eks. PO-2025-001
     supplier: Mapped[str] = mapped_column(String(120), default="")
+    pdf_path: Mapped[str] = mapped_column(String(300), default="")
+    archived: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 class PurchaseOrderLine(Base):
@@ -108,6 +110,7 @@ class ItemUnit(Base):
     reserved_co_id: Mapped[Optional[int]] = mapped_column(ForeignKey("customer_orders.id", ondelete="SET NULL"), nullable=True)
 
     status: Mapped[str] = mapped_column(String(20), default="available")  # available | reserved | used
+    purchase_price: Mapped[float] = mapped_column(Float, default=0.0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 

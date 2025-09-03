@@ -3,7 +3,21 @@
 <h1 class="text-xl font-semibold mb-3">Leverandørordre</h1>
 
 <section class="rounded-2xl border border-zinc-200 bg-white p-3 mb-4">
-  <form method="post" action="/po/new" class="flex flex-wrap gap-2 items-end">
+  <form method="get" action="/po" class="flex flex-wrap gap-2 items-end mb-3">
+    <div>
+      <label class="block text-xs text-zinc-600">Søk</label>
+      <input name="q" value="{{ q or '' }}" class="px-2 py-1 rounded border w-64" placeholder="Søk kode/leverandør">
+    </div>
+    <div>
+      <label class="block text-xs text-zinc-600">Sorter</label>
+      <select name="sort" class="px-2 py-1 rounded border">
+        <option value="newest" {% if sort=='newest' %}selected{% endif %}>Nyest først</option>
+        <option value="oldest" {% if sort=='oldest' %}selected{% endif %}>Eldst først</option>
+      </select>
+    </div>
+    <button class="px-3 py-1.5 rounded border">Filtrer</button>
+  </form>
+  <form method="post" action="/po/new" enctype="multipart/form-data" class="flex flex-wrap gap-2 items-end">
     <div>
       <label class="block text-xs text-zinc-600">PO-kode</label>
       <input name="code" class="px-2 py-1 rounded border w-48" placeholder="PO-2025-001" required>
@@ -11,6 +25,10 @@
     <div>
       <label class="block text-xs text-zinc-600">Leverandør</label>
       <input name="supplier" class="px-2 py-1 rounded border w-64" placeholder="Leverandørnavn">
+    </div>
+    <div>
+      <label class="block text-xs text-zinc-600">Vedlegg (PDF)</label>
+      <input type="file" name="pdf" accept="application/pdf" class="px-2 py-1 rounded border w-64">
     </div>
     <button class="px-3 py-1.5 rounded border">+ Ny PO</button>
   </form>
@@ -27,6 +45,10 @@
       <div class="p-3 flex items-center gap-2 border-b border-zinc-100">
         <div class="font-semibold">{{ p.po.code }}</div>
         <div class="text-sm text-zinc-600">{{ p.po.supplier }}</div>
+        {% if p.po.pdf_path %}<a class="text-xs underline" href="{{ p.po.pdf_path }}" target="_blank">PDF</a>{% endif %}
+        <form method="post" action="/po/{{ p.po.id }}/archive" class="ml-2">
+          <button class="px-2 py-1 rounded border text-xs" title="Flytt til arkiv">Arkiver</button>
+        </form>
         <div class="ml-auto text-sm text-zinc-700">Gjenstår: <b>{{ p.total_remaining }}</b></div>
       </div>
       <div class="p-3 border-b border-zinc-100">
@@ -41,6 +63,9 @@
           </div>
           <button class="px-3 py-1.5 rounded border">+ Linje</button>
         </form>
+        {% if p.po.pdf_path %}
+          <div class="mt-2 text-xs"><a class="underline" href="{{ p.po.pdf_path }}" target="_blank">Åpne vedlagt PDF</a></div>
+        {% endif %}
       </div>
       <table class="w-full text-sm">
         <thead class="bg-zinc-100">
@@ -70,9 +95,15 @@
               <form method="post" action="/po/{{ p.po.id }}/receive" class="flex flex-wrap gap-2 items-center justify-end">
                 <input type="hidden" name="item_id" value="{{ x.item.id if x.item else x.line.item_id }}">
                 <input type="number" name="qty" value="{{ x.remaining if x.remaining>0 else 1 }}" min="1" class="w-20 px-2 py-1 rounded border" title="Antall">
+                <input type="number" step="0.01" name="price" placeholder="Pris" class="w-28 px-2 py-1 rounded border" title="Innkjøpspris">
                 <input type="text" name="co_code" placeholder="CO-2025-001" class="w-36 px-2 py-1 rounded border" title="CO-kode">
                 <label class="inline-flex items-center gap-1 text-xs text-zinc-700"><input type="checkbox" name="auto_reserve" value="1" checked class="rounded border"> Reserver til CO</label>
                 <button class="px-2 py-1 rounded border">Motta</button>
+              </form>
+              <form method="post" action="/po/{{ p.po.id }}/undo_receive" class="mt-1 flex flex-wrap gap-2 items-center justify-end">
+                <input type="hidden" name="item_id" value="{{ x.item.id if x.item else x.line.item_id }}">
+                <input type="number" name="qty" value="1" min="1" class="w-20 px-2 py-1 rounded border" title="Angre antall">
+                <button class="px-2 py-1 rounded border text-rose-700 border-rose-300">Angre mottak</button>
               </form>
             </td>
           </tr>
@@ -83,4 +114,18 @@
     {% endfor %}
   </div>
 {% endif %}
+<datalist id="items_skus">
+  {% if items_for_datalist %}
+    {% for it in items_for_datalist %}
+      <option value="{{ it.sku }}" label="{{ it.name }}"></option>
+    {% endfor %}
+  {% endif %}
+</datalist>
+<script>
+  // Knytt datalist til alle SKU-felter på denne siden
+  (function(){
+    var inputs = document.querySelectorAll('input[name="sku"]');
+    inputs.forEach(function(inp){ inp.setAttribute('list', 'items_skus'); });
+  })();
+</script>
 {% endblock %}

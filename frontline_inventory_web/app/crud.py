@@ -513,11 +513,62 @@ def adjust_stock(
     db.refresh(tx)
     return tx
 
+def undo_receive_units(
+    db: Session,
+    item: Item,
+    qty: int,
+    po: Optional[PurchaseOrder] = None,
+    note: str = "Angret mottak",
+    actor: Optional[User] = None,
+) -> Tx:
+    qty = max(0, int(qty))
+    if qty == 0:
+        raise HTTPException(status_code=400, detail="Angi antall > 0")
+    q = select(ItemUnit).where(
+        ItemUnit.item_id == item.id,
+        ItemUnit.status.in_(("available", "ledig")),
+    )
+    if po:
+        q = q.where(ItemUnit.po_id == po.id)
+    units = db.execute(q.order_by(ItemUnit.id.desc()).limit(qty)).scalars().all()
+    if not units:
+        raise HTTPException(status_code=400, detail="Fant ingen enheter å angre.")
+    take = len(units)
+    # update PO line received
+    if po:
+        pol = db.execute(
+            select(PurchaseOrderLine).where(PurchaseOrderLine.po_id == po.id, PurchaseOrderLine.item_id == item.id)
+        ).scalar_one_or_none()
+        if pol:
+            pol.qty_received = max(0, (pol.qty_received or 0) - take)
+    for u in units:
+        db.delete(u)
+    item.qty = max(0, (item.qty or 0) - take)
+    item.last_updated = datetime.utcnow()
+    tx = Tx(
+        item_id=item.id,
+        sku=item.sku,
+        name=item.name,
+        delta=-take,
+        note=note,
+        po_id=(po.id if po else None),
+        user_id=(actor.id if actor else None),
+        user_name=(actor.name if actor else None),
+    )
+    db.add_all([item, tx])
+    db.commit(); db.refresh(tx)
+    return tx
+
 
 def inventory_stats(db: Session) -> Tuple[int, float]:
-    total_items = db.execute(select(func.count(Item.id))).scalar_one()
-    total_value = db.execute(select(func.sum((Item.price or 0) * (Item.qty or 0)))).scalar()
-    return total_items or 0, float(total_value or 0.0)
+    total_items = db.execute(select(func.count(Item.id))).scalar_one() or 0
+    # Sum up per-unit purchase_price for units not yet used
+    total_value = db.execute(
+        select(func.sum(ItemUnit.purchase_price)).where(
+            ItemUnit.status.in_(("available", "ledig", "reserved", "reservert"))
+        )
+    ).scalar() or 0.0
+    return int(total_items), float(total_value)
 
 
 def delete_customer(db: Session, customer: Customer, confirm_code: str | None = None) -> None:
@@ -610,6 +661,7 @@ def create_units_for_receive(
     po_code: str,
     note: str,
     actor: User | None = None,
+    unit_price: float | None = None,
 ) -> Tx:
     qty = int(qty)
 
@@ -626,12 +678,16 @@ def create_units_for_receive(
             db.commit()
             db.refresh(po)
 
-    # 2) Opprett enheter
+    # 2) Create units and update last known item price if provided
+    price_val = float(unit_price or 0.0)
+    if price_val > 0:
+        item.price = price_val
     for _ in range(qty):
         db.add(ItemUnit(
             item_id=item.id,
             po_id=(po.id if po else None),
             status="available",
+            purchase_price=price_val,
             created_at=datetime.utcnow(),
         ))
 
