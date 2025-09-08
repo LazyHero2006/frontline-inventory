@@ -5,8 +5,39 @@
   {{ error }}
 </div>
 {% endif %}
+<!-- Mobil: hele filteret stables i høyden -->
+<form class="sm:hidden mb-4 grid grid-cols-1 gap-2" method="get" action="/">
+  <input class="w-full px-3 py-2 rounded-lg border border-zinc-300" name="q" value="{{ q }}" placeholder="Søk navn, SKU, notater">
+  <label class="grid gap-1">
+    <span class="text-xs text-zinc-500">Kategori</span>
+    <select class="w-full px-3 py-2 rounded-lg border border-zinc-300" name="category">
+      <option {% if category=='Alle' %}selected{% endif %}>Alle</option>
+      {% for c in cats %}<option {% if category==c %}selected{% endif %}>{{ c }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="grid gap-1">
+    <span class="text-xs text-zinc-500">Lokasjon</span>
+    <select class="w-full px-3 py-2 rounded-lg border border-zinc-300" name="location">
+      <option {% if location=='Alle' %}selected{% endif %}>Alle</option>
+      {% for l in locs %}<option {% if location==l %}selected{% endif %}>{{ l }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="grid gap-1">
+    <span class="text-xs text-zinc-500">Sortering</span>
+    <select class="w-full px-3 py-2 rounded-lg border border-zinc-300" name="sort">
+      <option value="name" {% if sort=='name' %}selected{% endif %}>Navn</option>
+      <option value="qty" {% if sort=='qty' %}selected{% endif %}>Antall</option>
+      <option value="value" {% if sort=='value' %}selected{% endif %}>Lagerverdi</option>
+      <option value="sku" {% if sort=='sku' %}selected{% endif %}>SKU</option>
+    </select>
+  </label>
+  <div class="grid grid-cols-2 gap-2">
+    <button class="px-3 py-2 rounded-lg bg-zinc-900 text-white" type="submit">Filtrer</button>
+    <a href="/" class="px-3 py-2 rounded-lg border border-zinc-300 text-center">Nullstill</a>
+  </div>
+</form>
 <!-- Mobil: søkefelt + filterknapp -->
-<div class="sm:hidden mb-3 flex gap-2">
+<div class="hidden sm:hidden mb-3 flex gap-2 w-full">
   <input class="flex-1 px-3 py-2 rounded-lg border border-zinc-300" name="q" form="filter-form" value="{{ q }}" placeholder="Søk navn, SKU, notater">
   <button id="open-filters" class="px-3 py-2 rounded-lg border border-zinc-300">Filtre</button>
   <button class="px-3 py-2 rounded-lg bg-zinc-900 text-white" type="submit" form="filter-form">Søk</button>
@@ -208,16 +239,7 @@
 </div>
 {% endif %}
 
-<script>
-  (function(){
-    const openBtn = document.getElementById('open-filters');
-    const drawer = document.getElementById('filters-drawer');
-    if (!openBtn || !drawer) return;
-    const closers = drawer.querySelectorAll('[data-close]');
-    openBtn.addEventListener('click', (e)=>{ e.preventDefault(); drawer.classList.remove('hidden'); });
-    closers.forEach(btn => btn.addEventListener('click', ()=> drawer.classList.add('hidden')));
-  })();
-</script>
+
 
 {% endblock %}
 

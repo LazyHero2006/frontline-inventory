@@ -3,32 +3,32 @@
 <h1 class="text-xl font-semibold mb-3">Leverandørordre</h1>
 
 <section class="rounded-2xl border border-zinc-200 bg-white p-3 mb-4">
-  <form method="get" action="/po" class="flex flex-wrap gap-2 items-end mb-3">
+  <form method="get" action="/po" class="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-end mb-3">
     <div>
       <label class="block text-xs text-zinc-600">Søk</label>
-      <input name="q" value="{{ q or '' }}" class="px-2 py-1 rounded border w-64" placeholder="Søk kode/leverandør">
+      <input name="q" value="{{ q or '' }}" class="w-full sm:w-64 px-2 py-1 rounded border" placeholder="Søk kode/leverandør">
     </div>
     <div>
       <label class="block text-xs text-zinc-600">Sorter</label>
-      <select name="sort" class="px-2 py-1 rounded border">
+      <select name="sort" class="w-full sm:w-auto px-2 py-1 rounded border">
         <option value="newest" {% if sort=='newest' %}selected{% endif %}>Nyest først</option>
         <option value="oldest" {% if sort=='oldest' %}selected{% endif %}>Eldst først</option>
       </select>
     </div>
     <button class="px-3 py-1.5 rounded border">Filtrer</button>
   </form>
-  <form method="post" action="/po/new" enctype="multipart/form-data" class="flex flex-wrap gap-2 items-end">
+  <form method="post" action="/po/new" enctype="multipart/form-data" class="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-end">
     <div>
       <label class="block text-xs text-zinc-600">PO-kode</label>
-      <input name="code" class="px-2 py-1 rounded border w-48" placeholder="PO-2025-001" required>
+      <input name="code" class="w-full sm:w-48 px-2 py-1 rounded border" placeholder="PO-2025-001" required>
     </div>
     <div>
       <label class="block text-xs text-zinc-600">Leverandør</label>
-      <input name="supplier" class="px-2 py-1 rounded border w-64" placeholder="Leverandørnavn">
+      <input name="supplier" class="w-full sm:w-64 px-2 py-1 rounded border" placeholder="Leverandørnavn">
     </div>
     <div>
       <label class="block text-xs text-zinc-600">Vedlegg (PDF)</label>
-      <input type="file" name="pdf" accept="application/pdf" class="px-2 py-1 rounded border w-64">
+      <input type="file" name="pdf" accept="application/pdf" class="w-full sm:w-64 px-2 py-1 rounded border">
     </div>
     <button class="px-3 py-1.5 rounded border">+ Ny PO</button>
   </form>

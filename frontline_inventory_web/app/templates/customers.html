@@ -2,11 +2,13 @@
 {% block content %}
 <h1 class="text-xl font-semibold mb-3">Kunder</h1>
 
-<form method="get" action="/customers" class="mb-3 flex gap-2 items-end">
-  <input class="flex-1 px-3 py-2 rounded border" name="q" value="{{ q or '' }}" placeholder="Søk navn, e-post, telefon">
-  <button class="px-3 py-2 rounded bg-zinc-900 text-white">Søk</button>
-  <a class="px-3 py-2 rounded border" href="/customers">Nullstill</a>
-  <a class="ml-auto hidden sm:inline-block px-3 py-2 rounded bg-zinc-900 text-white" href="/customers/new">+ Ny kunde</a>
+<form method="get" action="/customers" class="mb-3 grid grid-cols-1 gap-2 sm:flex sm:items-end">
+  <input class="w-full sm:flex-1 px-3 py-2 rounded border" name="q" value="{{ q or '' }}" placeholder="Søk navn, e-post, telefon">
+  <div class="grid grid-cols-2 sm:flex gap-2">
+    <button class="px-3 py-2 rounded bg-zinc-900 text-white">Søk</button>
+    <a class="px-3 py-2 rounded border text-center" href="/customers">Nullstill</a>
+  </div>
+  <a class="sm:ml-auto hidden sm:inline-block px-3 py-2 rounded bg-zinc-900 text-white" href="/customers/new">+ Ny kunde</a>
   </form>
 
 <!-- Mobil kortvisning -->

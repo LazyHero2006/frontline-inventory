@@ -8,18 +8,17 @@
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
   <link rel="icon" href="data:,">
   <style>
-    .container { max-width: 1200px; }
   </style>
 </head>
 <body class="bg-zinc-50 text-zinc-900">
 <header class="sticky top-0 z-10 backdrop-blur bg-white/80 border-b border-zinc-200">
-  <div class="container mx-auto px-4 py-3 flex items-center gap-3">
+  <div class="container mx-auto px-4 py-2 sm:py-3 flex items-center gap-2 sm:gap-3">
     <a href="/" class="flex items-center gap-2 group">
-      <img src="/static/frontline-logo.svg" alt="Frontline" class="h-12 rounded">
-      <span class="font-black tracking-tight text-xl group-hover:underline">Inventory</span>
+      <img src="/static/frontline-logo.png" alt="Frontline" class="h-8 sm:h-10 md:h-12 rounded">
+      <span class="hidden sm:inline font-black tracking-tight text-lg sm:text-xl group-hover:underline">Inventory</span>
     </a>
     {% if low_count is defined and low_count > 0 %}
-    <span class="text-xs px-2 py-1 rounded-full bg-rose-600 text-white">{{ low_count }} lav beholdning</span>
+    <span class="hidden sm:inline text-xs px-2 py-1 rounded-full bg-rose-600 text-white">{{ low_count }} lav beholdning</span>
     {% endif %}
     <nav class="ml-auto flex items-center gap-2">
     <button id="menu-btn" class="ml-auto p-2 rounded border border-zinc-300 md:hidden" aria-label="Meny">

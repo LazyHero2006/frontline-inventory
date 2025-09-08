@@ -2,13 +2,13 @@
 {% block content %}
 <h1 class="text-xl font-semibold mb-3">PO-arkiv</h1>
 
-<form method="get" action="/po/archive" class="rounded-2xl border bg-white p-3 mb-4 flex gap-2 items-end">
+<form method="get" action="/po/archive" class="rounded-2xl border bg-white p-3 mb-4 grid grid-cols-1 gap-2 sm:flex sm:items-end">
   <div>
     <label class="block text-xs text-zinc-600">Søk</label>
-    <input name="q" value="{{ q or '' }}" class="px-2 py-1 rounded border w-64" placeholder="Søk kode/leverandør">
+    <input name="q" value="{{ q or '' }}" class="w-full sm:w-64 px-2 py-1 rounded border" placeholder="Søk kode/leverandør">
   </div>
   <button class="px-3 py-1.5 rounded border">Filtrer</button>
-  <a href="/po" class="ml-auto px-3 py-1.5 rounded border">Til aktive</a>
+  <a href="/po" class="sm:ml-auto px-3 py-1.5 rounded border">Til aktive</a>
   </form>
 
 {% if pos and pos|length == 0 %}
