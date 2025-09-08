@@ -26,7 +26,20 @@
         <button class="px-2 py-1 rounded border text-xs" title="Flytt tilbake">Gjenopprett</button>
       </form>
     </div>
-    <table class="w-full text-sm">
+    <!-- Mobil kortvisning av linjer -->
+    <div class="sm:hidden p-3 space-y-3">
+      {% for l in p.lines %}
+      <div class="rounded-lg border bg-white p-3">
+        <div class="font-medium">{% if l.item %}{{ l.item.name }}{% else %}{{ l.item_id }}{% endif %}</div>
+        {% if l.item %}<div class="text-xs text-zinc-500">{{ l.item.sku }}</div>{% endif %}
+        <div class="mt-1 grid grid-cols-2 gap-1 text-sm">
+          <div>Bestilt: <b>{{ l.qty_ordered }}</b></div>
+          <div>Mottatt: <b>{{ l.qty_received }}</b></div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <table class="hidden sm:table w-full text-sm">
       <thead class="bg-zinc-100">
         <tr>
           <th class="p-2 text-left">Vare</th>

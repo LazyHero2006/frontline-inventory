@@ -44,7 +44,22 @@
 <div class="mb-3 text-sm text-zinc-600">Sum bestilt (filtrert visning): <b>{{ total_ordered }}</b></div>
 {% endif %}
 
-<div class="rounded-2xl border border-zinc-200 bg-white overflow-hidden">
+<!-- Mobil kortvisning -->
+<div class="sm:hidden space-y-3">
+  {% for co in rows %}
+  <div class="rounded-lg border bg-white p-4">
+    <div class="font-semibold">{{ co.code }}</div>
+    <div class="text-sm text-zinc-600">Status: {{ co.status|capitalize }}</div>
+    <div class="text-sm text-zinc-600">Varer: {{ ordered_totals[co.id] if ordered_totals and co.id in ordered_totals else 0 }}</div>
+    <a class="mt-2 inline-block w-full px-3 py-2 rounded bg-zinc-900 text-white text-center" href="/co/{{ co.id }}">Se detaljer</a>
+  </div>
+  {% endfor %}
+  {% if rows|length == 0 %}
+    <div class="p-3 text-zinc-500">Ingen ordre.</div>
+  {% endif %}
+</div>
+
+<div class="hidden sm:block rounded-2xl border border-zinc-200 bg-white overflow-hidden">
   <table class="w-full text-sm">
     <thead class="bg-zinc-100"><tr><th class="p-2 text-left">Kode</th><th class="p-2 text-left">Kunde</th><th class="p-2 text-left">Status</th><th class="p-2 text-right">Bestilt</th><th class="p-2 text-right">Handling</th></tr></thead>
     <tbody>
@@ -63,7 +78,11 @@
       {% if rows|length == 0 %}<tr><td class="p-3 text-zinc-500" colspan="5">Ingen ordre.</td></tr>{% endif %}
     </tbody>
   </table>
-</div>
+ </div>
+{% endblock %}
+
+{% block fab %}
+<a href="/co/new" class="w-14 h-14 rounded-full bg-zinc-900 text-white flex items-center justify-center text-3xl shadow-lg">+</a>
 {% endblock %}
 
 

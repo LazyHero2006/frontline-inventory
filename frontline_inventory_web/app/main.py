@@ -134,6 +134,11 @@ def dashboard(request: Request, q: str = "", category: str = "Alle", location: s
     low_count = sum(1 for i in items if (avail_counts.get(i.id, 0) <= 0))
     total_items, total_value = crud.inventory_stats(db)
 
+    # Nøkkeltall til mobilvisning
+    total_available = int(db.execute(select(func.count(ItemUnit.id)).where(ItemUnit.status.in_(("available", "ledig")))).scalar() or 0)
+    total_reserved = int(db.execute(select(func.count(ItemUnit.id)).where(ItemUnit.status.in_(("reserved", "reservert")))).scalar() or 0)
+    total_used = int(db.execute(select(func.count(ItemUnit.id)).where(ItemUnit.status.in_(("used", "brukt")))).scalar() or 0)
+
     return templates.TemplateResponse("index.html", {
         "request": request,
         "user": current_user,
@@ -152,6 +157,9 @@ def dashboard(request: Request, q: str = "", category: str = "Alle", location: s
         "total_value": total_value,
         "fmt_currency": fmt_currency,
         "avail_counts": avail_counts,
+        "total_available": total_available,
+        "total_reserved": total_reserved,
+        "total_used": total_used,
     })
 
 @app.get("/orders", response_class=HTMLResponse)
@@ -1048,9 +1056,19 @@ def export_csv(db: Session = Depends(get_db), current_user=Depends(require_user)
     return Response(content=out.getvalue(), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=frontline-inventory.csv"})
 
 @app.get("/customers")
-def customers_list(request: Request, db: Session = Depends(get_db), current_user=Depends(require_user)):
-    rows = db.execute(select(Customer).order_by(Customer.name)).scalars().all()
-    return templates.TemplateResponse("customers.html", {"request": request, "user": current_user, "rows": rows})
+def customers_list(request: Request, q: str = "", db: Session = Depends(get_db), current_user=Depends(require_user)):
+    stmt = select(Customer)
+    if q:
+        like = f"%{q}%"; from sqlalchemy import or_
+        stmt = stmt.where(or_(Customer.name.like(like), Customer.email.like(like), Customer.phone.like(like)))
+    rows = db.execute(stmt.order_by(Customer.name)).scalars().all()
+    # Ordretelling pr kunde
+    from .models import CustomerOrder
+    counts = {cid: cnt for cid, cnt in db.execute(select(CustomerOrder.customer_id, func.count(CustomerOrder.id)).group_by(CustomerOrder.customer_id)).all()}
+    return templates.TemplateResponse(
+        "customers.html",
+        {"request": request, "user": current_user, "rows": rows, "order_counts": counts, "q": q},
+    )
 
 @app.get("/customers/new")
 def customers_new(request: Request, db: Session = Depends(get_db), current_user=Depends(require_user)):

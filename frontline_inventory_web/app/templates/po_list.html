@@ -67,7 +67,40 @@
           <div class="mt-2 text-xs"><a class="underline" href="{{ p.po.pdf_path }}" target="_blank">Åpne vedlagt PDF</a></div>
         {% endif %}
       </div>
-      <table class="w-full text-sm">
+      <!-- Mobil kortvisning av linjer -->
+      <div class="sm:hidden p-3 space-y-3">
+        {% for x in p.lines %}
+        <div class="rounded-lg border bg-white p-3">
+          <div class="font-medium">
+            {% if x.item %}
+              <a class="underline hover:no-underline" href="/item/{{ x.item.id }}/units">{{ x.item.name }}</a>
+              <div class="text-xs text-zinc-500">{{ x.item.sku }}</div>
+            {% else %}
+              {{ x.line.item_id }}
+            {% endif %}
+          </div>
+          <div class="mt-1 grid grid-cols-2 gap-1 text-sm">
+            <div>Bestilt: <b>{{ x.ordered }}</b></div>
+            <div>Mottatt: <b>{{ x.received }}</b></div>
+            <div class="col-span-2">Gjenstår: <b>{{ x.remaining }}</b></div>
+          </div>
+          <form method="post" action="/po/{{ p.po.id }}/receive" class="mt-2 grid gap-2">
+            <input type="hidden" name="item_id" value="{{ x.item.id if x.item else x.line.item_id }}">
+            <input type="number" name="qty" value="{{ x.remaining if x.remaining>0 else 1 }}" min="1" class="px-2 py-1 rounded border" title="Antall">
+            <input type="number" step="0.01" name="price" placeholder="Pris" class="px-2 py-1 rounded border" title="Innkjøpspris">
+            <input type="text" name="co_code" placeholder="CO-2025-001" class="px-2 py-1 rounded border" title="CO-kode">
+            <label class="inline-flex items-center gap-1 text-xs text-zinc-700"><input type="checkbox" name="auto_reserve" value="1" checked class="rounded border"> Reserver til CO</label>
+            <button class="px-3 py-2 rounded border">Motta</button>
+          </form>
+          <form method="post" action="/po/{{ p.po.id }}/undo_receive" class="mt-2 grid gap-2">
+            <input type="hidden" name="item_id" value="{{ x.item.id if x.item else x.line.item_id }}">
+            <input type="number" name="qty" value="1" min="1" class="px-2 py-1 rounded border" title="Angre antall">
+            <button class="px-3 py-2 rounded border text-rose-700 border-rose-300">Angre mottak</button>
+          </form>
+        </div>
+        {% endfor %}
+      </div>
+      <table class="hidden sm:table w-full text-sm">
         <thead class="bg-zinc-100">
           <tr>
             <th class="p-2 text-left">Vare</th>

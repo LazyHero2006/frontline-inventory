@@ -5,7 +5,70 @@
   {{ error }}
 </div>
 {% endif %}
-<form class="grid md:grid-cols-3 gap-2 items-end mb-4" method="get" action="/">
+<!-- Mobil: søkefelt + filterknapp -->
+<div class="sm:hidden mb-3 flex gap-2">
+  <input class="flex-1 px-3 py-2 rounded-lg border border-zinc-300" name="q" form="filter-form" value="{{ q }}" placeholder="Søk navn, SKU, notater">
+  <button id="open-filters" class="px-3 py-2 rounded-lg border border-zinc-300">Filtre</button>
+  <button class="px-3 py-2 rounded-lg bg-zinc-900 text-white" type="submit" form="filter-form">Søk</button>
+  <a href="/" class="px-3 py-2 rounded-lg border border-zinc-300" title="Nullstill">Nullstill</a>
+  </div>
+
+<!-- Mobil filter-drawer -->
+<div id="filters-drawer" class="sm:hidden fixed inset-0 z-30 hidden">
+  <div class="absolute inset-0 bg-black/30" data-close></div>
+  <div class="absolute right-0 top-0 bottom-0 w-[85%] max-w-sm bg-white shadow-xl p-4 flex flex-col">
+    <div class="flex items-center mb-3">
+      <div class="font-semibold text-lg">Filtre</div>
+      <button class="ml-auto px-3 py-1.5 rounded border" data-close>Lukk</button>
+    </div>
+    <div class="grid gap-3">
+      <label class="grid gap-1">
+        <span class="text-xs text-zinc-500">Kategori</span>
+        <select class="px-3 py-2 rounded-lg border border-zinc-300" name="category" form="filter-form">
+          <option {% if category=='Alle' %}selected{% endif %}>Alle</option>
+          {% for c in cats %}<option {% if category==c %}selected{% endif %}>{{ c }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="grid gap-1">
+        <span class="text-xs text-zinc-500">Lokasjon</span>
+        <select class="px-3 py-2 rounded-lg border border-zinc-300" name="location" form="filter-form">
+          <option {% if location=='Alle' %}selected{% endif %}>Alle</option>
+          {% for l in locs %}<option {% if location==l %}selected{% endif %}>{{ l }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="grid gap-1">
+        <span class="text-xs text-zinc-500">Sortering</span>
+        <select class="px-3 py-2 rounded-lg border border-zinc-300" name="sort" form="filter-form">
+          <option value="name" {% if sort=='name' %}selected{% endif %}>Navn</option>
+          <option value="qty" {% if sort=='qty' %}selected{% endif %}>Antall</option>
+          <option value="value" {% if sort=='value' %}selected{% endif %}>Lagerverdi</option>
+          <option value="sku" {% if sort=='sku' %}selected{% endif %}>SKU</option>
+        </select>
+      </label>
+      <div class="mt-2 flex gap-2">
+        <button class="flex-1 px-3 py-2 rounded-lg bg-zinc-900 text-white" type="submit" form="filter-form">Bruk</button>
+        <a class="flex-1 px-3 py-2 rounded-lg border border-zinc-300 text-center" href="/">Nullstill</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Nøkkeltall (mobil: store kort) -->
+<div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+  <div class="rounded-2xl border bg-white p-4">
+    <div class="text-sm text-zinc-600">Ledig</div>
+    <div class="text-2xl font-bold text-emerald-700">{{ total_available }}</div>
+  </div>
+  <div class="rounded-2xl border bg-white p-4">
+    <div class="text-sm text-zinc-600">Reservert</div>
+    <div class="text-2xl font-bold text-amber-700">{{ total_reserved }}</div>
+  </div>
+  <div class="rounded-2xl border bg-white p-4 col-span-2 sm:col-span-1">
+    <div class="text-sm text-zinc-600">Lav beholdning</div>
+    <div class="text-2xl font-bold text-rose-700">{{ low_count }}</div>
+  </div>
+</div>
+<form id="filter-form" class="hidden sm:grid md:grid-cols-3 gap-2 items-end mb-4" method="get" action="/">
   <label class="grid gap-1 md:col-span-2">
     <span class="text-xs text-zinc-500">Søk</span>
     <input class="px-3 py-2 rounded-lg border border-zinc-300" name="q" value="{{ q }}" placeholder="Søk navn, SKU, notater">
@@ -21,7 +84,7 @@
     <label class="grid gap-1">
       <span class="text-xs text-zinc-500">Lokasjon</span>
       <select class="px-3 py-2 rounded-lg border border-zinc-300" name="location">
-        <option {% if location=='Alle' %}selected{% endif %}>Alle</option>
+                <option {% if location=='Alle' %}selected{% endif %}>Alle</option>
         {% for l in locs %}<option {% if location==l %}selected{% endif %}>{{ l }}</option>{% endfor %}
       </select>
     </label>
@@ -46,7 +109,32 @@
   </div>
 </form>
 
-<div class="rounded-2xl border border-zinc-200 overflow-hidden bg-white">
+<!-- Mobil kortvisning -->
+<div class="sm:hidden space-y-3">
+  {% for i in items %}
+  {% set avail = (avail_counts[i.id] if avail_counts and i.id in avail_counts else 0) %}
+  <div class="rounded-lg border border-zinc-200 bg-white p-4">
+    <div class="font-medium mb-1">{{ i.name }}</div>
+    <div class="text-sm">Status:
+      {% if avail <= 0 %}
+        <span class="text-rose-700 font-medium">Tomt</span>
+      {% elif avail <= i.min_qty %}
+        <span class="text-amber-700 font-medium">Lav beholdning</span>
+      {% else %}
+        <span class="text-emerald-700 font-medium">Ledig</span>
+      {% endif %}
+    </div>
+    <div class="text-sm">Antall: {{ i.qty }}</div>
+    <a href="/item/{{ i.id }}/units" class="mt-2 inline-block px-3 py-2 rounded bg-zinc-900 text-white text-sm">Se detaljer</a>
+  </div>
+  {% endfor %}
+  {% if items|length == 0 %}
+  <div class="p-3 text-zinc-500">Ingen varer funnet.</div>
+  {% endif %}
+</div>
+
+<!-- Desktop tabellvisning -->
+<div class="hidden sm:block rounded-2xl border border-zinc-200 overflow-hidden bg-white">
   <table class="w-full text-sm">
     <thead class="bg-zinc-100">
       <tr class="text-left">
@@ -63,8 +151,7 @@
     </thead>
     <tbody>
       {% for i in items %}
-      <tr class="odd:bg-zinc-50 align-top cursor-pointer hover:bg-zinc-100"
-    ondblclick="window.location.href='/item/{{ i.id }}/units'">
+      <tr class="odd:bg-zinc-50 align-top cursor-pointer hover:bg-zinc-100" ondblclick="window.location.href='/item/{{ i.id }}/units'">
         <td class="p-2">
           <div class="font-medium flex items-center gap-2">
             {% set avail = (avail_counts[i.id] if avail_counts and i.id in avail_counts else 0) %}
@@ -94,11 +181,10 @@
           </form>
           <div class="flex items-center gap-2">
             <a href="/item/{{ i.id }}/edit" class="px-2 py-1 rounded border border-zinc-300">Rediger</a>
-            <form action="/item/{{ i.id }}/delete" method="post" class="inline-flex items-center gap-2"
-      onsubmit="return confirm('Slette {{ i.name }}? Dette kan ikke angres.');">
-  <input name="confirm" class="px-2 py-1 rounded border text-xs" placeholder="skriv 1234" required>
-  <button class="px-2 py-1 rounded bg-rose-600 text-white text-xs">Slett</button>
-</form>
+            <form action="/item/{{ i.id }}/delete" method="post" class="inline-flex items-center gap-2" onsubmit="return confirm('Slette {{ i.name }}? Dette kan ikke angres.');">
+              <input name="confirm" class="px-2 py-1 rounded border text-xs" placeholder="skriv 1234" required>
+              <button class="px-2 py-1 rounded bg-rose-600 text-white text-xs">Slett</button>
+            </form>
           </div>
         </td>
       </tr>
@@ -122,4 +208,19 @@
 </div>
 {% endif %}
 
+<script>
+  (function(){
+    const openBtn = document.getElementById('open-filters');
+    const drawer = document.getElementById('filters-drawer');
+    if (!openBtn || !drawer) return;
+    const closers = drawer.querySelectorAll('[data-close]');
+    openBtn.addEventListener('click', (e)=>{ e.preventDefault(); drawer.classList.remove('hidden'); });
+    closers.forEach(btn => btn.addEventListener('click', ()=> drawer.classList.add('hidden')));
+  })();
+</script>
+
+{% endblock %}
+
+{% block fab %}
+<a href="/item/new" class="w-14 h-14 rounded-full bg-zinc-900 text-white flex items-center justify-center text-3xl shadow-lg">+</a>
 {% endblock %}

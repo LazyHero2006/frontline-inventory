@@ -15,7 +15,35 @@
         <div class="ml-auto text-sm text-zinc-700">Mangler: <b>{{ o.total_needed }}</b></div>
         <a href="/co/{{ o.co.id }}" class="ml-3 px-3 py-1.5 rounded border">Åpne ordre</a>
       </div>
-      <table class="w-full text-sm">
+      <!-- Mobil kortvisning av linjer -->
+      <div class="sm:hidden p-3 space-y-3">
+        {% for x in o.lines %}
+        <div class="rounded-lg border bg-white p-3">
+          <div class="font-medium">
+            {% if x.item %}
+              <a class="underline hover:no-underline" href="/item/{{ x.item.id }}/units">{{ x.item.name }}</a>
+              <div class="text-xs text-zinc-500">{{ x.item.sku }}</div>
+            {% else %}
+              {{ x.line.item_id }}
+            {% endif %}
+          </div>
+          <div class="mt-1 grid grid-cols-2 gap-1 text-sm">
+            <div>Bestilt: <b>{{ x.ordered }}</b></div>
+            <div>Reservert: <b>{{ x.reserved }}</b></div>
+            <div>Levert: <b>{{ x.fulfilled }}</b></div>
+            <div class="col-span-2">Mangler: <b>{{ x.need }}</b></div>
+          </div>
+          <form method="post" action="/co/{{ o.co.id }}/receive" class="mt-2 grid gap-2">
+            <input type="hidden" name="item_id" value="{{ x.item.id if x.item else x.line.item_id }}">
+            <input type="number" name="qty" value="{{ x.need }}" min="1" class="px-2 py-1 rounded border" title="Antall">
+            <input type="text" name="po_code" placeholder="PO-2025-001" class="px-2 py-1 rounded border" title="PO-kode" list="po_codes">
+            <label class="inline-flex items-center gap-1 text-xs text-zinc-700"><input type="checkbox" name="auto_reserve" value="1" checked class="rounded border"> Reserver til CO</label>
+            <button class="px-3 py-2 rounded border">Motta</button>
+          </form>
+        </div>
+        {% endfor %}
+      </div>
+      <table class="hidden sm:table w-full text-sm">
         <thead class="bg-zinc-100">
           <tr>
             <th class="p-2 text-left">Vare</th>

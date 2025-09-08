@@ -1,14 +1,42 @@
 {% extends "base.html" %}
 {% block content %}
 <h1 class="text-xl font-semibold mb-3">Kunder</h1>
-<div class="mb-3"><a class="px-3 py-2 rounded bg-zinc-900 text-white" href="/customers/new">+ Ny kunde</a></div>
-<div class="rounded-2xl border border-zinc-200 bg-white overflow-hidden">
+
+<form method="get" action="/customers" class="mb-3 flex gap-2 items-end">
+  <input class="flex-1 px-3 py-2 rounded border" name="q" value="{{ q or '' }}" placeholder="Søk navn, e-post, telefon">
+  <button class="px-3 py-2 rounded bg-zinc-900 text-white">Søk</button>
+  <a class="px-3 py-2 rounded border" href="/customers">Nullstill</a>
+  <a class="ml-auto hidden sm:inline-block px-3 py-2 rounded bg-zinc-900 text-white" href="/customers/new">+ Ny kunde</a>
+  </form>
+
+<!-- Mobil kortvisning -->
+<div class="sm:hidden space-y-3">
+  {% for c in rows %}
+  <div class="rounded-lg border bg-white p-4">
+    <div class="font-medium">{{ c.name }}</div>
+    {% set oc = (order_counts[c.id] if order_counts and c.id in order_counts else 0) %}
+    <div class="text-sm text-zinc-600">Ordre: {{ oc }}</div>
+    <div class="text-sm text-zinc-600">{{ c.email or '' }}{% if c.phone %} · {{ c.phone }}{% endif %}</div>
+    <div class="mt-2 flex gap-2">
+      <a href="/co?customer_id={{ c.id }}" class="flex-1 px-3 py-2 rounded bg-zinc-900 text-white text-center">Se ordre</a>
+      <a href="/customers/{{ c.id }}/delete" class="px-3 py-2 rounded border text-center">Slett</a>
+    </div>
+  </div>
+  {% endfor %}
+  {% if rows|length == 0 %}
+    <div class="p-3 text-zinc-500">Ingen kunder.</div>
+  {% endif %}
+</div>
+
+<!-- Desktop tabellvisning -->
+<div class="hidden sm:block rounded-2xl border border-zinc-200 bg-white overflow-hidden">
   <table class="w-full text-sm">
     <thead class="bg-zinc-100">
       <tr>
         <th class="p-2 text-left">Navn</th>
         <th class="p-2 text-left">E-post</th>
         <th class="p-2 text-left">Telefon</th>
+        <th class="p-2 text-right">Ordre</th>
         <th class="p-2 text-right">Handling</th>
       </tr>
     </thead>
@@ -18,13 +46,19 @@
         <td class="p-2">{{ c.name }}</td>
         <td class="p-2">{{ c.email }}</td>
         <td class="p-2">{{ c.phone }}</td>
+        <td class="p-2 text-right">{{ order_counts[c.id] if order_counts and c.id in order_counts else 0 }}</td>
         <td class="p-2 text-right">
+          <a href="/co?customer_id={{ c.id }}" class="px-2 py-1 rounded border mr-2">Se ordre</a>
           <a href="/customers/{{ c.id }}/delete" class="px-2 py-1 rounded border">Slett</a>
         </td>
       </tr>
       {% endfor %}
-      {% if rows|length == 0 %}<tr><td class="p-3 text-zinc-500" colspan="4">Ingen kunder.</td></tr>{% endif %}
+      {% if rows|length == 0 %}<tr><td class="p-3 text-zinc-500" colspan="5">Ingen kunder.</td></tr>{% endif %}
     </tbody>
   </table>
 </div>
+{% endblock %}
+
+{% block fab %}
+<a href="/customers/new" class="w-14 h-14 rounded-full bg-zinc-900 text-white flex items-center justify-center text-3xl shadow-lg">+</a>
 {% endblock %}

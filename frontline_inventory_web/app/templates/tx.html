@@ -5,7 +5,26 @@
   <input class="px-3 py-2 rounded border border-zinc-300" name="q" value="{{ q }}" placeholder="Søk i logg (navn, SKU, notat, bruker)">
   <button class="px-3 py-2 rounded bg-zinc-900 text-white" type="submit">Søk</button>
 </form>
-<div class="rounded-2xl border border-zinc-200 overflow-hidden bg-white">
+
+<!-- Mobil kortvisning -->
+<div class="sm:hidden space-y-3">
+  {% for t in rows %}
+  <div class="rounded-lg border border-zinc-200 bg-white p-4 text-sm">
+    <div><span class="font-medium">Tid:</span> {{ t.ts.strftime('%Y-%m-%d %H:%M:%S') }}</div>
+    <div><span class="font-medium">Navn:</span> {{ t.name }}</div>
+    <div><span class="font-medium">SKU:</span> {{ t.sku }}</div>
+    <div><span class="font-medium">Endring:</span> <span class="{% if t.delta >= 0 %}text-emerald-700{% else %}text-rose-700{% endif %}">{{ '+' if t.delta>=0 else '' }}{{ t.delta }}</span></div>
+    <div><span class="font-medium">Notat:</span> {{ t.note }}{% if t.co %}<span class="text-zinc-500"> • CO {{ t.co.code }}</span>{% endif %}{% if t.po %}<span class="text-zinc-500"> • PO {{ t.po.code }}</span>{% endif %}</div>
+    <div><span class="font-medium">Bruker:</span> {{ t.user_name or '' }}</div>
+  </div>
+  {% endfor %}
+  {% if rows|length == 0 %}
+  <div class="p-3 text-zinc-500">Ingen hendelser.</div>
+  {% endif %}
+</div>
+
+<!-- Desktop tabellvisning -->
+<div class="hidden sm:block rounded-2xl border border-zinc-200 overflow-hidden bg-white">
   <table class="w-full text-sm">
     <thead class="bg-zinc-100">
       <tr class="text-left">
@@ -25,10 +44,10 @@
         <td class="p-2">{{ t.sku }}</td>
         <td class="p-2 font-semibold {% if t.delta >= 0 %}text-emerald-700{% else %}text-rose-700{% endif %}">{{ '+' if t.delta>=0 else '' }}{{ t.delta }}</td>
         <td class="p-2">
-  {{ t.note }}
-  {% if t.co %}<span class="text-zinc-500"> • CO {{ t.co.code }}</span>{% endif %}
-  {% if t.po %}<span class="text-zinc-500"> • PO {{ t.po.code }}</span>{% endif %}
-</td>
+          {{ t.note }}
+          {% if t.co %}<span class="text-zinc-500"> • CO {{ t.co.code }}</span>{% endif %}
+          {% if t.po %}<span class="text-zinc-500"> • PO {{ t.po.code }}</span>{% endif %}
+        </td>
         <td class="p-2">{{ t.user_name or '' }}</td>
       </tr>
       {% endfor %}

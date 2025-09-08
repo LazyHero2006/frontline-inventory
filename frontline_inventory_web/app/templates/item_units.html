@@ -14,13 +14,20 @@
       <div class="w-full h-44 flex items-center justify-center text-zinc-400">Ingen bilde</div>
     {% endif %}
   </div>
-  <div class="rounded-2xl border p-4 bg-white"><div class="text-sm text-zinc-600">Ledig</div><div class="text-2xl font-bold">{{ count_avail }}</div></div>
-  <div class="rounded-2xl border p-4 bg-white"><div class="text-sm text-zinc-600">Reservert</div><div class="text-2xl font-bold">{{ count_res }}</div></div>
-  <div class="rounded-2xl border p-4 bg-white"><div class="text-sm text-zinc-600">Brukt</div><div class="text-2xl font-bold">{{ count_used }}</div></div>
+  <div class="rounded-2xl border p-4 bg-white"><div class="text-sm text-zinc-600">Ledig</div><div class="text-2xl font-bold text-emerald-700">{{ count_avail }}</div></div>
+  <div class="rounded-2xl border p-4 bg-white"><div class="text-sm text-zinc-600">Reservert</div><div class="text-2xl font-bold text-amber-700">{{ count_res }}</div></div>
+  <div class="rounded-2xl border p-4 bg-white"><div class="text-sm text-zinc-600">Brukt</div><div class="text-2xl font-bold text-rose-700">{{ count_used }}</div></div>
+</div>
+
+<!-- Mobil: hurtighandlinger -->
+<div class="sm:hidden grid gap-2 mb-4">
+  <a href="#reserve-section" class="w-full px-4 py-3 rounded-lg bg-zinc-900 text-white text-center">Reserver</a>
+  <a href="/receive" class="w-full px-4 py-3 rounded-lg border text-center">Mottak</a>
+  <a href="#batch-actions" class="w-full px-4 py-3 rounded-lg border text-center">Uttak / batch</a>
 </div>
 
 <!-- Reserver til kunde -->
-<div class="rounded-2xl border p-4 bg-white mb-4">
+<div id="reserve-section" class="rounded-2xl border p-4 bg-white mb-4">
   <h2 class="font-semibold mb-2">Reserver til kunde</h2>
   <form method="post" action="/item/{{ item.id }}/reserve_customer" class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
     <div>
@@ -68,7 +75,7 @@
 
 <!-- Enhetsliste + batch-handlinger (CO-reservasjon, opphev, uttak) -->
 <div class="rounded-2xl border bg-white overflow-hidden">
-  <div class="p-3 flex items-center justify-between">
+  <div id="batch-actions" class="p-3 flex items-center justify-between">
     <div class="text-sm text-zinc-600">Enheter</div>
     <div class="flex gap-2">
       <form id="reserveForm" method="post" action="/item/{{ item.id }}/units/reserve" class="flex items-center gap-2">
@@ -91,7 +98,37 @@
     </div>
   </div>
 
-  <div class="overflow-x-auto">
+  <!-- Mobil kortvisning av enheter -->
+  <div class="sm:hidden p-3 space-y-3">
+    {% for u in units %}
+    <div class="rounded-lg border bg-white p-3">
+      <div class="flex items-center gap-2 mb-1">
+        <input type="checkbox" class="rowcb" value="{{ u.id }}" {% if u.status == 'used' %}disabled{% endif %}>
+        <div class="font-medium">ID: {{ u.id }}</div>
+      </div>
+      <div class="text-sm mb-1">
+        Status:
+        {% if u.status in ('available','ledig') %}
+          <span class="text-emerald-700 font-medium">ledig</span>
+        {% elif u.status in ('reserved','reservert') %}
+          <span class="text-amber-700 font-medium">reservert</span>
+        {% else %}
+          <span class="text-rose-700 font-medium">brukt</span>
+        {% endif %}
+      </div>
+      <div class="text-sm">PO: {% if u.po %}{{ u.po.code }}{% else %}-{% endif %}</div>
+      <div class="text-sm">Pris: {% if u.purchase_price is not none %}{{ '%.2f'|format(u.purchase_price) }}{% else %}-{% endif %}</div>
+      <div class="text-sm">Reservasjon: {% if u.reserved_co %}<a href="/co/{{ u.reserved_co.id }}" class="underline">{{ u.reserved_co.code }}</a>{% else %}-{% endif %}</div>
+      <div class="text-sm">Opprettet: {{ u.created_at.strftime('%Y-%m-%d %H:%M') if u.created_at }}</div>
+      <div class="text-sm">Brukt: {% if u.used_at %}{{ u.used_at.strftime('%Y-%m-%d %H:%M') }}{% else %}-{% endif %}</div>
+    </div>
+    {% endfor %}
+    {% if units|length == 0 %}
+      <div class="p-3 text-zinc-500">Ingen enheter registrert ennå.</div>
+    {% endif %}
+  </div>
+
+  <div class="overflow-x-auto hidden sm:block">
   <table class="w-full text-sm">
     <thead class="bg-zinc-100">
       <tr class="text-left">
